@@ -39,6 +39,7 @@ public class ProfileController extends BaseController {
 //        ProfileCreateRequestDTO dto = new com.fasterxml.jackson.databind.ObjectMapper()
 //                .readValue(payload, ProfileCreateRequestDTO.class);
         System.out.println("Profile Created");
+        System.out.println("Profile created again?");
         profileService.createProfile(payload, file);
 
 
