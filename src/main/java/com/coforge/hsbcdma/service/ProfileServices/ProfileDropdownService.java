@@ -3,7 +3,7 @@ package com.coforge.hsbcdma.service.ProfileServices;
 import com.coforge.hsbcdma.dto.DemandsDTO.RefDTO;
 import com.coforge.hsbcdma.dto.ProfilesDTO.ProfileDropdownDTO;
 import com.coforge.hsbcdma.repository.LocationRepository;
-import com.coforge.hsbcdma.repository.ProfileRepositories.ProfileStatusRepository;
+import com.coforge.hsbcdma.repository.ProfileRepositories.*;
 import com.coforge.hsbcdma.repository.dropdownRepository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,6 +19,13 @@ public class ProfileDropdownService {
     private final PrimarySkillsRepository primarySkillsRepository;
     private final SecondarySkillsRepository secondarySkillsRepository;
     private final ProfileStatusRepository profileStatusRepository;
+
+
+    private final OriginRepository originRepository;
+    private final KaratStatusMasterRepository karatStatusMasterRepository;
+    private final SourceMasterRepository sourceMasterRepository;
+    private final OverallStatusMasterRepository overallStatusMasterRepository;
+
 
     public ProfileDropdownDTO getProfileDropdowns() {
 
@@ -72,6 +79,34 @@ public class ProfileDropdownService {
                         .map(s -> new RefDTO(s.getId(), s.getName()))
                         .toList()
         );
+
+
+// ================= NEW DROPDOWNS =================
+
+        dto.setOrigins(
+                originRepository.findAll().stream()
+                        .map(o -> new RefDTO(o.getId(), o.getName()))
+                        .toList()
+        );
+
+        dto.setKaratStatuses(
+                karatStatusMasterRepository.findAll().stream()
+                        .map(k -> new RefDTO(k.getId(), k.getName()))
+                        .toList()
+        );
+
+        dto.setSources(
+                sourceMasterRepository.findAll().stream()
+                        .map(s -> new RefDTO(s.getId(), s.getName()))
+                        .toList()
+        );
+
+        dto.setOverallStatusRdgs(
+                overallStatusMasterRepository.findAll().stream()
+                        .map(o -> new RefDTO(o.getId(), o.getName()))
+                        .toList()
+        );
+
 
         return dto;
     }

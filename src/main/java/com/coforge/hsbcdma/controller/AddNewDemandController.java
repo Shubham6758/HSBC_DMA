@@ -102,7 +102,7 @@ public class AddNewDemandController extends BaseController{
     )
     public ResponseEntity<?> step2Form(
             @RequestPart("files") List<MultipartFile> files,
-             @RequestPart("data") AddDemandRequestDTO addNewDemandDTO
+            @RequestPart("data") AddDemandRequestDTO addNewDemandDTO
     ) throws IOException {
 
         logger.info("****** Inside step2Form method of AddNewDemandController.");
@@ -173,6 +173,14 @@ public class AddNewDemandController extends BaseController{
     ) {
         PageResponse getAllDemandsResponse = addNewDemandService1.getAllDemands2(page, size,hbuId);
         return success(getAllDemandsResponse);
+    }
+
+    @GetMapping("/rr-flagged-demands")
+    public ResponseEntity<?> getRrFlaggedDemands(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return success(addNewDemandService1.getRrFlaggedDemands(page, size));
     }
 
     @PostMapping(

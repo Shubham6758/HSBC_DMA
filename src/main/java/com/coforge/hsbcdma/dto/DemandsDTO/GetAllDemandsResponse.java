@@ -29,7 +29,8 @@ public class GetAllDemandsResponse {
 //        return lobVal.isBlank() ? String.valueOf(demandId) : lobVal + "-" + demandId;
 //    }
 
-    private Long rrNumber;
+    private String rrNumber;
+    private Boolean rrFlag;
     private String fileName;
 
     // Other scalar fields

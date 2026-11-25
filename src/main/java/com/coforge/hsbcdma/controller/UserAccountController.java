@@ -1,7 +1,10 @@
 package com.coforge.hsbcdma.controller;
 
 import com.coforge.hsbcdma.dto.*;
+import com.coforge.hsbcdma.dto.UserMananagementDTO.DecryptEmailRequest;
+import com.coforge.hsbcdma.dto.UserMananagementDTO.DecryptEmailResponse;
 import com.coforge.hsbcdma.repository.UserAccountRepository;
+import com.coforge.hsbcdma.service.EmailService;
 import com.coforge.hsbcdma.service.RolePermissionService;
 import com.coforge.hsbcdma.service.UserAccountService;
 import com.coforge.hsbcdma.util.JwtUtil;
@@ -12,11 +15,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.time.LocalDateTime;
-import java.util.Map;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import java.time.LocalDateTime;
 
 /**
  * This is a User controller which handles all requests for registering new user and has all end-points required for login.
@@ -42,6 +40,11 @@ public class UserAccountController extends BaseController {
     @Autowired
     RolePermissionService rolePermissionService;
 
+
+    @Autowired
+    private EmailService emailService;
+
+
     @GetMapping("/register")
     public ResponseEntity<?> getRolesAndPermissions(){
         return success(rolePermissionService.getRolesAndPermissions());
@@ -58,6 +61,7 @@ public class UserAccountController extends BaseController {
     public ResponseEntity<?> login(@RequestBody LoginRequestDTO loginRequest,HttpServletRequest request){
         AuthResponseDTO responseDTO = userService.login(loginRequest,request);
 //        return ResponseEntity.status(HttpStatus.OK).body(responseDTO);
+
         if(responseDTO.getStatus().equals("SUCCESS"))
             return success("Login successful", responseDTO);
         else
@@ -108,4 +112,11 @@ public class UserAccountController extends BaseController {
                 userService.refreshToken(body.get("refreshToken"))
         );
     }
+
+
+    @PostMapping("/email/decrypt")
+    public DecryptEmailResponse decryptEmail(@RequestBody DecryptEmailRequest request) {
+        return emailService.decryptEmail(request);
+    }
+
 }

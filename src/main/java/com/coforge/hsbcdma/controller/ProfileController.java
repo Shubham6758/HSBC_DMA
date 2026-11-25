@@ -4,6 +4,7 @@ import com.coforge.hsbcdma.dto.DemandsDTO.PageResponse;
 import com.coforge.hsbcdma.dto.ProfilesDTO.ProfileCreateRequestDTO;
 import com.coforge.hsbcdma.dto.ProfilesDTO.ProfileUpdateRequestDTO;
 import com.coforge.hsbcdma.dto.ProfilesDTO.ProfilesFilterRequest;
+import com.coforge.hsbcdma.dto.UserMananagementDTO.DecryptPanRequest;
 import com.coforge.hsbcdma.service.ProfileServices.ProfileDropdownService;
 import com.coforge.hsbcdma.service.ProfileServices.ProfileService;
 import org.apache.coyote.BadRequestException;
@@ -80,9 +81,11 @@ public class ProfileController extends BaseController {
     public PageResponse getAllProfiles(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @RequestParam(required = false) Long hbuId
+            @RequestParam(required = false) Long hbuId,
+            @RequestParam(defaultValue = "createdAt") String sortBy,
+            @RequestParam(defaultValue = "DESC") String sortDir
     ) {
-        return profileService.getAllProfiles(page, size,hbuId);
+        return profileService.getAllProfiles(page, size, hbuId, sortBy, sortDir);
     }
 
     @PostMapping(value = "/bulk-upload/ta", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -90,5 +93,40 @@ public class ProfileController extends BaseController {
             @RequestPart("file") MultipartFile excelFile
     ) {
         return ResponseEntity.ok(profileService.bulkUploadTAProfiles(excelFile));
+    }
+
+    @PostMapping(value = "/bulk-upload/rdg", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<?> bulkUploadRDGProfiles(
+            @RequestPart("file") MultipartFile excelFile
+    ) {
+        return ResponseEntity.ok(profileService.bulkUploadRDGProfiles(excelFile));
+    }
+
+
+
+
+    @PostMapping("/decrypt-pan/{profileId}")
+    public ResponseEntity<String> decryptPan(@PathVariable Long profileId,@RequestBody DecryptPanRequest request) {
+
+        String pan = profileService.decryptPan(profileId,request.getPassword());
+
+        return ResponseEntity.ok(pan);
+    }
+
+
+    @GetMapping("/pending-with-hbu-count")
+    public long getPendingWithHbuCount(
+            @RequestParam(required = false) Long hbuId
+    ) {
+        return profileService.getPendingWithHbuCount(hbuId);
+    }
+
+    @PutMapping("/action/{id}")
+    public ResponseEntity<?> takeAction(
+            @PathVariable Long id,
+            @RequestParam String action // ACCEPTED / REJECTED
+    ) {
+        profileService.takeAction(id, action);
+        return ResponseEntity.ok("Action applied");
     }
 }

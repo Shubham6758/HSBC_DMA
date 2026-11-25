@@ -33,6 +33,14 @@ public class ProfileUpdateRequestDTO {
     private Set<Long> primarySkillsIds;
     private Set<Long> secondarySkillsIds;
 
+
+    private LocalDate l1InterviewDate;
+    private String currentLocation;
+    private String officialNP;
+    private String negotiableNpLwd;
+    private String recruiter;
+
+
     private Long originId;
     private Long karatStatusId;
     private Long sourceId;

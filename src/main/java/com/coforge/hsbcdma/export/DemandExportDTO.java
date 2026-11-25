@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 public record DemandExportDTO(
         Long id,
         String demandId,
-        Long rrNumber,
+        String rrNumber,
         Boolean isSubconRR,
 //        Boolean flag,
         Boolean karat,

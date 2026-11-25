@@ -50,7 +50,7 @@ public class AddDemandDraftCreateRequest {
 
     @Data
     public static class RrDraftRequest {
-        private Long rrNumber;
+        private String rrNumber;
 
         // keep your earlier field
         private String fileName; // server will overwrite with stored RR JD filename

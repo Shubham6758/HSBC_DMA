@@ -21,26 +21,35 @@ import com.coforge.hsbcdma.repository.ProfileRepositories.ProfileStatusRepositor
 import com.coforge.hsbcdma.repository.UserAccountRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.*;
 import com.coforge.hsbcdma.service.NotificationServices.NotificationService;
+import com.coforge.hsbcdma.util.AESUtil;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.apache.coyote.BadRequestException;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.ChronoUnit;
 import java.util.*;
 import java.util.stream.Collectors;
+
 
 @Service
 @RequiredArgsConstructor
@@ -66,6 +75,10 @@ public class ProfileService {
     private final SecondarySkillsRepository secondarySkillsRepository;
 
     private final NotificationService notificationService;
+    private final PasswordEncoder passwordEncoder; // ✅ ADD THIS
+
+    @Value("${app.encryption.key}")
+    private String systemKey;
 
     @Transactional
     public ProfileCreateResponseDTO createProfile(ProfileCreateRequestDTO dto, MultipartFile file) {
@@ -112,7 +125,31 @@ public class ProfileService {
         p.setEmpId(dto.getEmpId());
         p.setSapId(dto.getSapId());                 // ✅ IMPORTANT
         p.setPhoneNumber(dto.getPhoneNumber());
-        p.setPanNumber(dto.getPanNumber());
+        System.out.println("RAW PAN INPUT: " + dto.getPanNumber());
+        if (dto.getPanNumber() != null && !dto.getPanNumber().isBlank()) {
+
+            try {
+
+
+                String key = getSystemEncryptionKey();
+                System.out.println("KEY USED IN CREATE: " + key);
+
+                String pan = dto.getPanNumber().trim();
+
+                // ✅ ALWAYS ENCRYPT (no guessing)
+                String encryptedPan = AESUtil.encrypt(pan, key);
+
+                p.setPanNumber(encryptedPan);
+
+                System.out.println("ENCRYPTED PAN SAVED: " + encryptedPan);
+
+//                p.setPanNumber(encryptedPan);
+
+            } catch (Exception e) {
+                throw new RuntimeException("PAN encryption failed");
+            }
+        }
+        System.out.println("ENCRYPTED PAN SAVED: " + p.getPanNumber());
         p.setIsActive(true);
         p.setExperience(dto.getExperience());
         p.setSummary(dto.getSummary());
@@ -132,9 +169,11 @@ public class ProfileService {
         if (dto.getCountryId() != null) {
             p.setCountry(em.getReference(CountryCode.class, dto.getCountryId()));
         }
-        if (dto.getProfileStatusId() != null) {
-            p.setProfileStatus(em.getReference(ProfileStatus.class, dto.getProfileStatusId()));
-        }
+        ProfileStatus defaultStatus =
+                profileStatusRepository.findByNameIgnoreCase("Pending with HBU")
+                        .orElseThrow(() -> new RuntimeException("Default status not found"));
+
+        p.setProfileStatus(defaultStatus);
 
         p.setPrimarySkills(toPrimarySkills(dto.getPrimarySkillsIds()));
         p.setSecondarySkills(toSecondarySkills(dto.getSecondarySkillsIds()));
@@ -158,6 +197,13 @@ public class ProfileService {
         }
 
 // -------- NEW Normal fields --------
+        // ===== TA fields =====
+        p.setL1InterviewDate(dto.getL1InterviewDate());
+        p.setCurrentLocation(dto.getCurrentLocation());
+        p.setOfficialNP(dto.getOfficialNP());
+        p.setNegotiableNpLwd(dto.getNegotiableNpLwd());
+        p.setRecruiter(dto.getRecruiter());
+
         p.setDateOfSubmission(dto.getDateOfSubmission());
         p.setKaratReadiness(dto.getKaratReadiness());
         p.setWeekOf(dto.getWeekOf());
@@ -176,6 +222,24 @@ public class ProfileService {
         // 3) Save profile FIRST (to get ID)
         Profile saved = profileRepository.save(p);
 
+// ✅ detach to prevent update
+//        entityManager.detach(saved);
+
+
+        try {
+            notificationService.notifyAllUsersExceptActor(
+                    "PROFILE",
+                    saved.getId(),
+                    "New Profile Created",
+                    "Profile " + saved.getCandidateName()
+                            + " has been created",
+                    getCurrentUserId()
+            );
+        } catch (Exception e) {
+            // optional: log
+        }
+
+
     /* -------------------------------------------------
        4) CV upload (OPTIONAL ✅)
        ------------------------------------------------- */
@@ -187,6 +251,93 @@ public class ProfileService {
         }
 
         return new ProfileCreateResponseDTO(saved.getId());
+    }
+
+    private String getSystemEncryptionKey() {
+        return deriveKey(systemKey);  // Hardcoded
+    }
+
+
+    public String deriveKey(String input) {
+        try {
+            MessageDigest sha = MessageDigest.getInstance("SHA-256");
+            byte[] key = sha.digest(input.getBytes(StandardCharsets.UTF_8));
+
+            // ✅ 16 bytes for AES-128
+            return Base64.getEncoder().encodeToString(Arrays.copyOf(key, 16));
+
+        } catch (Exception e) {
+            throw new RuntimeException("Key generation failed");
+        }
+    }
+    private String getUserEncryptionKey() {
+
+        String userId = getCurrentUserId();
+
+        User user = userAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // ✅ Always derive key
+        return deriveKey(user.getUserId());
+    }
+
+    public String decryptPan(Long profileId, String password) {
+
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || !auth.isAuthenticated()) {
+            throw new RuntimeException("User not authenticated");
+        }
+
+        String userId = auth.getName();
+
+        User user = userAccountRepository.findByUserId(userId)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // ✅ Step 1: validate password
+        if (!passwordEncoder.matches(password, user.getPassword())) {
+            throw new RuntimeException("Invalid password");
+        }
+
+        // ✅ Step 2: fetch profile
+        Profile profile = profileRepository.findById(profileId)
+                .orElseThrow(() -> new RuntimeException("Profile not found"));
+        System.out.println("DB PAN: " + profile.getPanNumber());
+        if (profile.getPanNumber() == null || profile.getPanNumber().isBlank()) {
+            throw new RuntimeException("PAN not available");
+        }
+
+        // ✅ Step 3: decrypt using system key
+        try {
+
+            String key = getSystemEncryptionKey();
+
+
+            System.out.println("---- DEBUG ----");
+            System.out.println("Encrypted PAN: " + profile.getPanNumber());
+            System.out.println("System Key: " + key);
+            System.out.println("Decoded Key Length: " + Base64.getDecoder().decode(key).length);
+            System.out.println("KEY USED IN DECRYPT: " + getSystemEncryptionKey());
+
+            String result = AESUtil.decrypt(profile.getPanNumber(), key);
+
+            System.out.println("Decrypted PAN: " + result);
+
+            return result;
+
+
+        } catch (Exception e) {
+            throw new RuntimeException("Decryption failed");
+        }
+    }
+
+
+
+    public long getPendingWithHbuCount(Long hbuId) {
+        return profileRepository.countByStatusAndHbu(
+                "Pending with HBU",
+                hbuId
+        );
     }
 
 
@@ -211,37 +362,48 @@ public class ProfileService {
                 try {
                     Profile profile = buildTAProfileFromRow(row, h);
                     profileRepository.save(profile);
+
+                    // ✅  AUDIT CALL
+                    genericAuditService.recordCreate(
+                            AuditHistory.EntityType.PROFILE,
+                            profile,
+                            profileSnapshotBuilder,
+                            profileAuditMeta,
+                            getCurrentUserId()
+                    );
                     success++;
                 } catch (Exception ex) {
 
-                    String reason;
+                    String reason = ex.getMessage();
 
-                    if (ex instanceof jakarta.validation.ConstraintViolationException cve) {
-                        reason = cve.getConstraintViolations()
-                                .stream()
-                                .findFirst()
-                                .map(v -> {
-                                    if ("panNumber".equals(v.getPropertyPath().toString())) {
-                                        return "Invalid PAN format (expected ABCDE1234F)";
-                                    }
-                                    return v.getMessage();
-                                })
-                                .orElse("Validation error");
-                    } else {
-                        reason = ex.getMessage();
-                    }
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("row", i + 1);
+                    err.put("candidate", getCell(row, h.get("Candidate Name"))); // nullable safe
+                    err.put("reason", reason);
 
-                    errors.add(Map.of(
-                            "row", i + 1,
-                            "candidate", getCell(row, h.get("Candidate Name")),
-                            "reason", reason
-                    ));
+                    errors.add(err);
                 }
             }
 
         } catch (Exception e) {
             throw new RuntimeException("Invalid Excel file", e);
         }
+
+
+        try {
+            if (success > 0) {
+                notificationService.notifyAllUsersExceptActor(
+                        "PROFILE",
+                        null, // no single reference ID
+                        "Bulk Profile Upload",
+                        success + " profiles uploaded successfully via TA bulk upload",
+                        getCurrentUserId()
+                );
+            }
+        } catch (Exception e) {
+            // optional log
+        }
+
 
         return Map.of(
                 "totalRows", success + errors.size(),
@@ -260,13 +422,12 @@ public class ProfileService {
                 "HBU",
                 "Primary Skill",
                 "Total Exp.",
-                "Current Location",
                 "Coforge Location",
                 "Official NP",
                 "Negotiable NP/LWD",
                 "Recruiter",
                 "Current Status",
-                "PAN No"
+                "SAP ID"
         );
 
         for (String col : mandatory) {
@@ -285,26 +446,28 @@ public class ProfileService {
         String hbuName              = getRequired(r, h, "HBU");
         String primarySkillName     = getRequired(r, h, "Primary Skill");
         Float experience            = parseExp(getRequired(r, h, "Total Exp."));
-        String currentLocation      = getRequired(r, h, "Current Location");
         String coforgeLocation      = getRequired(r, h, "Coforge Location");
         String officialNP           = getRequired(r, h, "Official NP");
-        LocalDate negotiableLwd     = parseDate(getRequired(r, h, "Negotiable NP/LWD"));
+        String negotiableLwd     = getRequired(r, h, "Negotiable NP/LWD");
         String recruiter            = getRequired(r, h, "Recruiter");
         String profileStatusName    = getRequired(r, h, "Current Status");
-        String pan                  = getRequired(r, h, "PAN No");
+        String sapId = getRequired(r, h, "SAP ID");
 
-        // ---- Uniqueness ----
-        validateUniquenessPanOnly(pan);
+
+        // ✅ uniqueness check using existing method
+        if (profileRepository.existsBySapId(sapId)) {
+            throw new RuntimeException("SAP ID already exists: " + sapId);
+        }
+
 
         Profile p = new Profile();
         p.setCandidateName(candidateName);
         p.setExperience(experience);
-        p.setCurrentLocation(currentLocation);
         p.setOfficialNP(officialNP);
         p.setNegotiableNpLwd(negotiableLwd);
         p.setL1InterviewDate(l1Date);
         p.setRecruiter(recruiter);
-        p.setPanNumber(pan);
+        p.setSapId(sapId);
         p.setIsActive("Active".equalsIgnoreCase(status));
 
         p.setExternalInternal(em.getReference(
@@ -330,6 +493,168 @@ public class ProfileService {
 
         return p;
     }
+
+    public Map<String, Object> bulkUploadRDGProfiles(MultipartFile file) {
+
+        List<Map<String, Object>> errors = new ArrayList<>();
+        int success = 0;
+
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+
+            Sheet sheet = workbook.getSheetAt(0);
+            Row headerRow = sheet.getRow(0);
+            Map<String, Integer> h = buildHeaderMap(headerRow);
+
+            validateRDGMandatoryHeaders(h);
+
+            for (int i = 1; i <= sheet.getLastRowNum(); i++) {
+
+                Row row = sheet.getRow(i);
+                if (isRowCompletelyEmpty(row)) continue;
+
+                try {
+                    Profile profile = buildRDGProfileFromRow(row, h);
+                    profileRepository.save(profile);
+
+                    // ✅  AUDIT CALL
+                    genericAuditService.recordCreate(
+                            AuditHistory.EntityType.PROFILE,
+                            profile,
+                            profileSnapshotBuilder,
+                            profileAuditMeta,
+                            getCurrentUserId()
+                    );
+                    success++;
+                } catch (Exception ex) {
+
+
+                    Map<String, Object> err = new HashMap<>();
+                    err.put("row", i + 1);
+                    err.put("empId", getCell(row, h.get("E Code"))); // can be null ✅
+                    err.put("reason", ex.getMessage());
+
+                    errors.add(err);
+
+                }
+            }
+
+        }
+        catch (Exception e) {
+            e.printStackTrace();  // ✅ TEMP for debugging
+            throw new RuntimeException(e.getMessage(), e);
+        }
+
+        return Map.of(
+                "totalRows", success + errors.size(),
+                "successCount", success,
+                "failureCount", errors.size(),
+                "errors", errors
+        );
+    }
+
+    private void validateRDGMandatoryHeaders(Map<String, Integer> h) {
+
+
+        List<String> mandatory = List.of(
+                "E Code",
+                "Name"
+        );
+
+        for (String col : mandatory) {
+            if (!h.containsKey(col)) {
+                throw new RuntimeException("Missing mandatory column: " + col);
+            }
+        }
+
+    }
+
+    private Profile buildRDGProfileFromRow(Row r, Map<String, Integer> h) {
+
+        String empId = getRequired(r, h, "E Code");
+        String name  = getRequired(r, h, "Name");
+
+        // ✅ uniqueness check
+        if (profileRepository.existsByEmpId(empId)) {
+            throw new RuntimeException("empId already exists: " + empId);
+        }
+
+        Profile p = new Profile();
+
+        p.setEmpId(empId);
+        p.setCandidateName(getCell(r, h.get("Name")));
+
+        // ✅ Skill → SkillCluster
+        String skill = getCell(r, h.get("Skill"));
+        if (!isBlank(skill)) {
+            p.setSkillCluster(em.getReference(
+                    SkillCluster.class,
+                    skillClusterId(skill)
+            ));
+        }
+
+        // ✅ Primary Skills (optional)
+        String primarySkillsCsv = getCell(r, h.get("Primary Skills"));
+
+        if (!isBlank(primarySkillsCsv)) {
+            Set<PrimarySkills> skills = parsePrimarySkills(primarySkillsCsv);
+            p.setPrimarySkills(skills);
+        }
+
+        // ✅ Source
+        String source = getCell(r, h.get("Source"));
+        if (!isBlank(source)) {
+            p.setSource(em.getReference(
+                    SourceMaster.class,
+                    sourceId(source)
+            ));
+        }
+
+        // ✅ Overall Status
+        String status = getCell(r, h.get("Overall Status"));
+        if (!isBlank(status)) {
+            p.setOverallStatusRdg(em.getReference(
+                    OverallStatusMaster.class,
+                    overallStatusId(status)
+            ));
+        }
+
+        // ✅ Location
+        String location = getCell(r, h.get("Location"));
+        if (!isBlank(location)) {
+            p.setLocation(em.getReference(
+                    Location.class,
+                    locationId(location)
+            ));
+        }
+
+        // ✅ Date fields
+        p.setDateOfSubmission(parseDateSafe(getCell(r, h.get("Date of submission"))));
+        p.setWeekOf(parseDateSafe(getCell(r, h.get("Week Of"))));
+        p.setStatusDate(parseDateSafe(getCell(r, h.get("Status Date"))));
+
+        // ✅ Practice, Band
+        p.setPractice(getCell(r, h.get("Practice")));
+        p.setBand(getCell(r, h.get("Band")));
+//      Internal by defaulr for rdg
+        p.setExternalInternal(em.getReference(
+                ExternalInternal.class, externalInternalId("Internal")
+        ));
+
+        // ✅ Ageing
+        Integer ageing = parseIntegerSafe(getCell(r, h.get("Ageing")));
+        p.setAgeing(ageing);
+
+        // ✅ Ageing Range
+        p.setAgeing(parseIntegerSafe(getCell(r, h.get("Ageing"))));
+
+        // ✅ default values (REQUIRED for your entity)
+        p.setIsActive(true);
+        p.setCountry(em.getReference(CountryCode.class, countryId("India")));
+        p.setCreatedByUserId(getCurrentUserId());
+
+        return p;
+    }
+
 
 
     @Transactional
@@ -494,6 +819,13 @@ public class ProfileService {
         }
 
         // Naye fields
+        // ===== TA fields =====
+        setIfNotNull(dto.getL1InterviewDate(), p::setL1InterviewDate);
+        setIfNotNull(dto.getCurrentLocation(), p::setCurrentLocation);
+        setIfNotNull(dto.getOfficialNP(), p::setOfficialNP);
+        setIfNotNull(dto.getNegotiableNpLwd(), p::setNegotiableNpLwd);
+        setIfNotNull(dto.getRecruiter(), p::setRecruiter);
+
         if (dto.getOriginId() != null) {
             p.setOrigin(em.getReference(Origin.class, dto.getOriginId()));
         }
@@ -549,16 +881,34 @@ public class ProfileService {
     }
 
 
-    public PageResponse getAllProfiles(int page, int size,Long hbuId) {
+    public PageResponse getAllProfiles(int page, int size, Long hbuId, String sortBy, String sortDir) {
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Sort sort;
 
-        Page<Profile> profilesPage = profileRepository.findAllWithRefsByHbu(hbuId,pageable);
+        if ("ageing".equalsIgnoreCase(sortBy)) {
+            // ✅ ageing DESC = createdAt ASC
+            sort = "DESC".equalsIgnoreCase(sortDir)
+                    ? Sort.by(Sort.Direction.ASC, "createdAt")
+                    : Sort.by(Sort.Direction.DESC, "createdAt");
+
+        } else {
+            sort = Sort.by(
+                    "DESC".equalsIgnoreCase(sortDir)
+                            ? Sort.Direction.DESC
+                            : Sort.Direction.ASC,
+                    sortBy
+            );
+        }
+
+        Pageable pageable = PageRequest.of(page, size, sort);
+
+        Page<Profile> profilesPage =
+                profileRepository.findAllWithRefsByHbu(hbuId, pageable);
 
         List<GetAllProfilesResponse> content = profilesPage.getContent()
                 .stream()
                 .map(this::toResponse)
-                .collect(Collectors.toList());
+                .toList();
 
         return new PageResponse(
                 content,
@@ -659,7 +1009,7 @@ public class ProfileService {
                 .lobShared(p.getLobShared())
                 .practice(p.getPractice())
                 .band(p.getBand())
-                .ageing(p.getAgeing())
+                .ageing(calculateAgeing(p)) // ✅ dynamic valuep.s
                 .ageingRange(p.getAgeingRange())
                 .codes(p.getCodes())
                 .codeType(p.getCodeType())
@@ -1013,5 +1363,105 @@ public class ProfileService {
         }
     }
 
+    private Long sourceId(String name) {
+        return em.createQuery(
+                        "SELECT s.id FROM SourceMaster s WHERE LOWER(s.name)=LOWER(:name)", Long.class)
+                .setParameter("name", name.trim())
+                .getResultStream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Invalid Source: " + name));
+    }
+
+    private Long overallStatusId(String name) {
+        return em.createQuery(
+                        "SELECT o.id FROM OverallStatusMaster o WHERE LOWER(o.name)=LOWER(:name)", Long.class)
+                .setParameter("name", name.trim())
+                .getResultStream()
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Invalid Overall Status: " + name));
+    }
+
+    private LocalDate parseDateSafe(String val) {
+        if (isBlank(val)) return null;
+        return parseDate(val);
+    }
+
+    private Integer parseIntegerSafe(String val) {
+        if (isBlank(val)) return null;
+        try {
+            return Integer.parseInt(val.trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Set<PrimarySkills> parsePrimarySkills(String csv) {
+
+        Set<PrimarySkills> skills = new HashSet<>();
+
+        for (String name : csv.split(",")) {
+            String skillName = name.trim();
+
+            if (skillName.isEmpty()) continue;
+
+            PrimarySkills skill = primarySkillsRepository
+                    .findByPrimarySkillsIgnoreCase(skillName)
+                    .orElseThrow(() ->
+                            new RuntimeException("Invalid Primary Skill: " + skillName)
+                    );
+
+            skills.add(skill);
+        }
+
+        return skills;
+    }
+
+
+    private int calculateAgeing(Profile p) {
+
+        LocalDate startDate = p.getCreatedAt() != null
+                ? p.getCreatedAt().toLocalDate()
+                : LocalDate.now();
+
+        LocalDate endDate = LocalDate.now();
+
+        // ✅ Stop ageing if stopped
+        if (Boolean.TRUE.equals(p.getAgeingStopped()) && p.getAgeingStopDate() != null) {
+            endDate = p.getAgeingStopDate();
+        }
+
+        return (int) ChronoUnit.DAYS.between(startDate, endDate);
+    }
+
+    @Transactional
+    public void takeAction(Long profileId, String action) {
+
+        Profile p = profileRepository.findById(profileId)
+                .orElseThrow(() -> new RuntimeException("Profile not found"));
+
+        if ("REJECTED".equalsIgnoreCase(action)) {
+
+            p.setActionStatus("REJECTED");
+
+            // ✅ stop ageing
+            p.setAgeingStopped(true);
+            p.setAgeingStopDate(LocalDate.now());
+
+        } else if ("ACCEPTED".equalsIgnoreCase(action)) {
+
+            p.setActionStatus("ACCEPTED");
+
+            // ✅ ageing continues
+            p.setAgeingStopped(false);
+            p.setAgeingStopDate(null);
+
+        } else {
+            throw new RuntimeException("Invalid action");
+        }
+
+        p.setUpdatedByUserId(getCurrentUserId());
+
+        profileRepository.save(p);
+    }
 
 }

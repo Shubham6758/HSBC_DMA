@@ -43,7 +43,10 @@ public class AddDemand extends BaseEntity {
     private Long demandId;
 
     @Column(name = "rr_number")
-    private Long rrNumber;
+    private String rrNumber;
+
+    @Column(name = "rr_flag")
+    private Boolean rrFlag;
 
     // scalar references (same pattern)
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "band_id")

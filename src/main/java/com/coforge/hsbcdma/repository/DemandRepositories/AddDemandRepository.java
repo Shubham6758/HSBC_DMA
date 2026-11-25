@@ -67,9 +67,28 @@ public interface AddDemandRepository extends JpaRepository<AddDemand, Long> {
     List<AddDemand> findByFileName(String fileName);
 
     @Query("select d.rrNumber from AddDemand d where d.rrNumber in :rrs")
-    List<Long> findExistingRrNumbers(@Param("rrs") Collection<Long> rrs);
+    List<String> findExistingRrNumbers(@Param("rrs") Collection<String> rrs);
 
-    boolean existsByRrNumberAndIdNot(Long rrNumber, Long id);
+    boolean existsByRrNumberAndIdNot(String rrNumber, Long id);
+
+    Optional<AddDemand> findByRrNumber(String rrNumber);
+
+    @EntityGraph(attributePaths = {
+            "hbu", "hbuSpoc",
+            "band", "priority", "lob",
+            "demandType", "demandTimeline",
+            "externalInternal", "status", "pod",
+            "pmo", "pmoSpoc", "salesSpoc",
+            "hiringManager", "deliveryManager",
+            "skillCluster","primarySkills","secondarySkills","demandLocations"
+    })
+    @Query("""
+    SELECT d
+    FROM AddDemand d
+    WHERE d.rrFlag = true
+    ORDER BY d.updatedAt DESC
+""")
+    Page<AddDemand> findAllRrFlagged(Pageable pageable);
 
 
     //for history

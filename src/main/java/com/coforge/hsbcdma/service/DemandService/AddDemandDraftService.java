@@ -1,5 +1,6 @@
 package com.coforge.hsbcdma.service.DemandService;
 
+import com.coforge.hsbcdma.config.S3StorageService;
 import com.coforge.hsbcdma.dto.DemandsDTO.AddDemandDraftCreateRequest;
 import com.coforge.hsbcdma.dto.DemandsDTO.AddDemandDraftOnlyCreateRequest;
 import com.coforge.hsbcdma.dto.DemandsDTO.AddDemandRrDraftBulkRequest;
@@ -49,6 +50,8 @@ public class AddDemandDraftService {
     @Autowired
     private UserAccountRepository userAccountRepository;
 
+    @Autowired
+    private S3StorageService s3StorageService;
 
     private static final Logger logger = LoggerFactory.getLogger(AddDemandDraftService.class);
 
@@ -97,28 +100,28 @@ public class AddDemandDraftService {
         // ==========================================================
         // 2) Many-to-One mapping
         // ==========================================================
-         draft.setHbu(refOrNull(Hbu.class, req.getHbuId()));
-         draft.setHbuSpoc(refOrNull(HbuSpoc.class, req.getHubSpocId()));
-         draft.setBand(refOrNull(Band.class, req.getBandId()));
-         draft.setPriority(refOrNull(Priority.class, req.getPriorityId()));
-         draft.setLob(refOrNull(Lob.class, req.getLobId()));
-         draft.setDemandType(refOrNull(DemandType.class, req.getDemandTypeId()));
-         draft.setDemandTimeline(refOrNull(DemandTimeLine.class, req.getDemandTimelineId()));
-         draft.setExternalInternal(refOrNull(ExternalInternal.class, req.getExternalInternalId()));
-         draft.setStatus(refOrNull(Status.class, req.getStatusId()));
-         draft.setPod(refOrNull(Pod.class, req.getPodId()));
-         draft.setPmoSpoc(refOrNull(PmoSpoc.class, req.getPmoSpocId()));
-         draft.setPmo(refOrNull(Pmo.class, req.getPmoId()));
-         draft.setSalesSpoc(refOrNull(SalesSpoc.class, req.getSalesSpocId()));
-         draft.setHiringManager(refOrNull(HiringManager.class, req.getHiringManagerId()));
-         draft.setDeliveryManager(refOrNull(DeliveryManager.class, req.getDeliveryManagerId()));
-         draft.setSkillCluster(refOrNull(SkillCluster.class, req.getSkillClusterId()));
+        draft.setHbu(refOrNull(Hbu.class, req.getHbuId()));
+        draft.setHbuSpoc(refOrNull(HbuSpoc.class, req.getHubSpocId()));
+        draft.setBand(refOrNull(Band.class, req.getBandId()));
+        draft.setPriority(refOrNull(Priority.class, req.getPriorityId()));
+        draft.setLob(refOrNull(Lob.class, req.getLobId()));
+        draft.setDemandType(refOrNull(DemandType.class, req.getDemandTypeId()));
+        draft.setDemandTimeline(refOrNull(DemandTimeLine.class, req.getDemandTimelineId()));
+        draft.setExternalInternal(refOrNull(ExternalInternal.class, req.getExternalInternalId()));
+        draft.setStatus(refOrNull(Status.class, req.getStatusId()));
+        draft.setPod(refOrNull(Pod.class, req.getPodId()));
+        draft.setPmoSpoc(refOrNull(PmoSpoc.class, req.getPmoSpocId()));
+        draft.setPmo(refOrNull(Pmo.class, req.getPmoId()));
+        draft.setSalesSpoc(refOrNull(SalesSpoc.class, req.getSalesSpocId()));
+        draft.setHiringManager(refOrNull(HiringManager.class, req.getHiringManagerId()));
+        draft.setDeliveryManager(refOrNull(DeliveryManager.class, req.getDeliveryManagerId()));
+        draft.setSkillCluster(refOrNull(SkillCluster.class, req.getSkillClusterId()));
 
         // ==========================================================
         // 3) Many-to-Many mapping
-         draft.setPrimarySkills(refSetOrNull(PrimarySkills.class, req.getPrimarySkillIds()));
-         draft.setSecondarySkills(refSetOrNull(SecondarySkills.class, req.getSecondarySkillIds()));
-         draft.setDemandLocations(refSetOrNull(Location.class, req.getLocationIds()));
+        draft.setPrimarySkills(refSetOrNull(PrimarySkills.class, req.getPrimarySkillIds()));
+        draft.setSecondarySkills(refSetOrNull(SecondarySkills.class, req.getSecondarySkillIds()));
+        draft.setDemandLocations(refSetOrNull(Location.class, req.getLocationIds()));
 
         AddDemandDraft savedDraft = addDemandsDraftRepository.save(draft);
         Long draftId = savedDraft.getId();
@@ -190,14 +193,14 @@ public class AddDemandDraftService {
 
         // NEW: karat flag
         draft.setKaratFlag(req.getKaratFlag());
-        
-            draft.setNumberOfPositions(req.getNumberOfPositions());
+
+        draft.setNumberOfPositions(req.getNumberOfPositions());
 
 
         draft.setExperience(req.getExperience());
         draft.setRemark(req.getRemark());
 
-            draft.setDemandReceivedDate(req.getDemandReceivedDate());
+        draft.setDemandReceivedDate(req.getDemandReceivedDate());
 
         // header fileName (if you really store something at header level)
 //        draft.setFileName(req.getFileName());
@@ -505,7 +508,7 @@ public class AddDemandDraftService {
 //        return storeJDText(dir, rr.getJdText(), rr.getFilenameHint());
 //    }
 
-// for edit files
+    // for edit files
     private String storeJDForRRDraft_Edit(Long draftId,
                                           DemandDraftEditRequest.RrDraftEditRequest rr,
                                           List<MultipartFile> files) {
@@ -601,40 +604,40 @@ public class AddDemandDraftService {
 //            return storeJDFileWithPrefix(dir, file, "rr-" + rr.getRrNumber());
 //        }
 
-        private String storeJDForRRDraft(Long draftId,
-                AddDemandDraftCreateRequest.RrDraftRequest rr,
-                List<MultipartFile> files) {
+    private String storeJDForRRDraft(Long draftId,
+                                     AddDemandDraftCreateRequest.RrDraftRequest rr,
+                                     List<MultipartFile> files) {
 
-            boolean hasFile = (rr.getFileName() != null);
-            boolean hasText = (rr.getJdText() != null && !rr.getJdText().isBlank());
+        boolean hasFile = (rr.getFileName() != null);
+        boolean hasText = (rr.getJdText() != null && !rr.getJdText().isBlank());
 
-            if (!hasFile && !hasText) return null;
-            Path dir = baseDir.resolve("draft")
-                    .resolve("draft-" + draftId)
-                    .normalize();
+        if (!hasFile && !hasText) return null;
+        Path dir = baseDir.resolve("draft")
+                .resolve("draft-" + draftId)
+                .normalize();
 
-            ensureInsideBaseDir(dir);
-            createDirIfNotExists(dir);
+        ensureInsideBaseDir(dir);
+        createDirIfNotExists(dir);
 
-            if (hasFile) {
-                if (files == null || files.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "RR fileName provided but no files uploaded for draftId " + draftId +
-                                    " rrNumber " + rr.getRrNumber()
-                    );
-                }
-
-                MultipartFile file = findFileByOriginalFilename(files, rr.getFileName());
-
-                if (file == null || file.isEmpty()) {
-                    throw new IllegalArgumentException(
-                            "No matching uploaded file found for fileName '" + rr.getFileName() +
-                                    "' draftId " + draftId + " rrNumber " + rr.getRrNumber()
-                    );
-                }
-
-                return storeJDFileWithPrefix(dir, file, "rr-" + rr.getRrNumber());
+        if (hasFile) {
+            if (files == null || files.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "RR fileName provided but no files uploaded for draftId " + draftId +
+                                " rrNumber " + rr.getRrNumber()
+                );
             }
+
+            MultipartFile file = findFileByOriginalFilename(files, rr.getFileName());
+
+            if (file == null || file.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "No matching uploaded file found for fileName '" + rr.getFileName() +
+                                "' draftId " + draftId + " rrNumber " + rr.getRrNumber()
+                );
+            }
+
+            return storeJDFileWithPrefix(dir, file, "rr-" + rr.getRrNumber());
+        }
 
         // 2) Else store jdText into file
         if (hasText) {
@@ -649,8 +652,8 @@ public class AddDemandDraftService {
     }
 
     private String storeJDForRRDraft1(Long draftId,
-                                     AddDemandRrDraftBulkRequest.RrDraftRequest rr,
-                                     List<MultipartFile> files) {
+                                      AddDemandRrDraftBulkRequest.RrDraftRequest rr,
+                                      List<MultipartFile> files) {
 
         boolean hasFile = (rr.getFileName() != null);
         boolean hasText = (rr.getJdText() != null && !rr.getJdText().isBlank());

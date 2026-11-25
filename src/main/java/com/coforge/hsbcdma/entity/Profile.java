@@ -3,7 +3,6 @@ package com.coforge.hsbcdma.entity;
 import com.coforge.hsbcdma.entity.dropdownEntities.*;
 import com.coforge.hsbcdma.entity.dropdownEntities.Profile.*;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
@@ -100,11 +99,11 @@ public class Profile extends BaseEntity {
     @Column(name = "file_name")
     private String fileName;
 
-    @Pattern(
-            regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$",
-            message = "Invalid PAN format"
-    )
-    @Column(name = "pan_number", length = 10)
+//    @Pattern(
+//            regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$",
+//            message = "Invalid PAN format"
+//    )
+    @Column(name = "pan_number")
     private String panNumber;
 
     @Column(name = "date_of_submission")
@@ -135,6 +134,16 @@ public class Profile extends BaseEntity {
     @Column(name = "ageing")
     private Integer ageing;
 
+    // Ageing
+    @Column(name = "ageing_stopped")
+    private Boolean ageingStopped = false;
+
+    @Column(name = "ageing_stop_date")
+    private LocalDate ageingStopDate;
+
+    @Column(name = "action_status")
+    private String actionStatus; // ACCEPTED / REJECTED / null
+
     @Column(name = "ageing_range")
     private String ageingRange;
 
@@ -164,7 +173,7 @@ public class Profile extends BaseEntity {
     private String officialNP;
 
     @Column(name = "negotiable_np_lwd")
-    private LocalDate negotiableNpLwd;
+    private String negotiableNpLwd;
 
     @Column(name = "recruiter", length = 255)
     private String recruiter;
@@ -211,11 +220,11 @@ public class Profile extends BaseEntity {
 
     // ================= PRE-PROCESS =================
 
-    @PrePersist
-    @PreUpdate
-    private void normalizePan() {
-        if (this.panNumber != null) {
-            this.panNumber = this.panNumber.trim().toUpperCase();
-        }
-    }
+//    @PrePersist
+//    @PreUpdate
+//    private void normalizePan() {
+//        if (this.panNumber != null) {
+//            this.panNumber = this.panNumber.trim().toUpperCase();
+//        }
+//    }
 }

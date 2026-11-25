@@ -24,6 +24,7 @@ import com.coforge.hsbcdma.repository.*;
 import com.coforge.hsbcdma.repository.UserManagementRepositories.ActionRepository;
 import com.coforge.hsbcdma.repository.UserManagementRepositories.ChildModuleRepository;
 import com.coforge.hsbcdma.repository.UserManagementRepositories.ModuleRepository;
+import com.coforge.hsbcdma.service.ProfileServices.ProfileService;
 import com.coforge.hsbcdma.util.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
@@ -98,13 +99,19 @@ public class UserAccountService {
     @Autowired
     private ActionRepository actionRepository;
 
+    @Autowired
+    private ProfileService profileService;
+
     // Added by Chetan
 
     @Autowired private LocationRepository locationRepository;
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private SubDepartmentRepository subDepartmentRepository;
 
+
     private static final int TOKEN_EXP_MINUTES =5;
+    private static final int MAX_LOGIN_ATTEMPTS = 5;
+    private static final int LOCK_DURATION_MINUTES = 15;
 
     private static final Logger logger = LoggerFactory.getLogger(UserAccountService.class);
 
@@ -129,6 +136,9 @@ public class UserAccountService {
         user.setPhoneNumber(userRequest.getPhoneNumber());
 //        user.setPermissions(userRequest.getPermissions());
 
+
+
+
         user.setName(userRequest.getName());
         CountryCode country = countryCodeRepository.findById(userRequest.getCountryId())
                 .orElseThrow(() -> new RuntimeException("Country not found with id: " + userRequest.getCountryId()));
@@ -145,9 +155,25 @@ public class UserAccountService {
 //        user.setCreatedAt(LocalDateTime.now());
 
         String tempPassword = generateTempPassword();
+//
+//        String encPhone = AESUtil.encrypt(
+//                String.valueOf(userRequest.getPhoneNumber()),
+//                tempPassword
+//        );
+
+//        String encEmail = AESUtil.encrypt(
+//                userRequest.getEmailId(),
+//                tempPassword
+//        );
+
+//        user.setPhoneNumber(Long.valueOf(encPhone));
+//        user.setEmailId(encEmail);
 
         // Saving encrypted temporary password
         user.setTempPassword(Objects.requireNonNull(passwordEncoder.encode(tempPassword)).substring(0,10));
+
+        System.out.println("TempPassword: " + tempPassword);
+        System.out.println(Objects.requireNonNull(passwordEncoder.encode(tempPassword)).substring(0,10));
         user.setFirstLogin(true);
 
 //      Added By chetan
@@ -194,21 +220,19 @@ public class UserAccountService {
         }
 
 
+        // ✅ ACCOUNT LOCK CHECK
+        if (user.getAccountLocked()) {
+            if (isUnlockTimeExpired(user)) {
+                resetFailedAttempts(user);
+                logger.info("User {} unlocked automatically", user.getUserId());
+            } else {
+                throw new InvalidCredentialsException(
+                        "Account locked due to multiple failed attempts. Try again later."
+                );
+            }
+        }
 
-        // 🔒 BLOCK PARALLEL LOGIN
-//        if (user.getSessionId() != null) {
-//            throw new InvalidCredentialsException(
-//                    "User is already logged in from another device");
-//        }
         LocalDateTime now = LocalDateTime.now();
-        // 🔒 BLOCK PARALLEL LOGIN (CORE REQUIREMENT)
-//        if (user.getActiveToken() != null &&
-//                user.getTokenExpiresAt() != null &&
-//                user.getTokenExpiresAt().isAfter(now)) {
-//
-//            throw new InvalidCredentialsException(
-//                    "User is already logged in from another device");
-//        }
 
         // ✅ Handle stale session cleanup
         if (user.getActiveToken() != null && user.getTokenExpiresAt() != null) {
@@ -233,8 +257,10 @@ public class UserAccountService {
             logger.info("First time login detected for userId: {}", user.getUserId());
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getTempPassword())) {
                 logger.warn("Invalid temp password attempt for userId: {}", user.getUserId());
+                increaseFailedAttempts(user);
                 throw new InvalidCredentialsException("Invalid temp password");
             }
+            resetFailedAttempts(user);
             logger.info("First time login successful, password change required for userId: {}", user.getUserId());
             return new AuthResponseDTO("PASSWORD_CHANGE_REQUIRED");
         }
@@ -251,23 +277,14 @@ public class UserAccountService {
                     )
             );
 
+            // ✅ RESET ATTEMPTS ON SUCCESS
+            resetFailedAttempts(user);
+
             // 2. Get username safely from principal
             UserDetails userDetails = (UserDetails) auth.getPrincipal();
             logger.info("Authentication successful for userId: {}", user.getUserId());
 
-
-            // ✅ Create session
-//            HttpSession session = request.getSession(true);
-//            user.setSessionId(session.getId());
-//            repo.save(user);
-
-
-
-
-
-            // 3. Generate JWT token
-
-// 3. Generate ACCESS token (JWT)
+            // 3. Generate ACCESS token (JWT)
             String accessToken = jwtUtil.generateToken(
                     userDetails.getUsername(),
                     user.getRole().getRole(),
@@ -275,7 +292,7 @@ public class UserAccountService {
             );
 
 
-// 4. Generate REFRESH token
+            // 4. Generate REFRESH token
             String refreshToken = jwtUtil.generateRefreshToken(user.getUserId());
 
 
@@ -285,7 +302,7 @@ public class UserAccountService {
             );
 
 
-// SINGLE-LOGIN ENFORCEMENT
+            // SINGLE-LOGIN ENFORCEMENT
             user.setActiveToken(accessToken);
             user.setTokenExpiresAt(LocalDateTime.now().plusMinutes(5)); // SAME AS JWT EXPIRY
             repo.save(user);
@@ -360,7 +377,7 @@ public class UserAccountService {
 
             logger.info("*********gerroleresponse***{}",roleInfo.toString());
 
-// ✅ RETURN BOTH TOKENS
+            // ✅ RETURN BOTH TOKENS
             return new AuthResponseDTO(
                     user.getUserId(),
                     accessToken,
@@ -373,8 +390,20 @@ public class UserAccountService {
             throw new UserInactiveException("User is inactive. Please contact admin.");
         }
         catch (BadCredentialsException e) {
-            logger.warn("Invalid login attempt for userId: {}", loginRequest.getUserId());
-            throw new InvalidCredentialsException("Invalid username or password");
+
+            logger.warn("Failed login attempt for {}", user.getUserId());
+
+            increaseFailedAttempts(user);
+
+            if (user.getAccountLocked()) {
+                throw new InvalidCredentialsException(
+                        "Account locked due to multiple failed attempts. Try after "
+                                + LOCK_DURATION_MINUTES + " minutes."
+                );
+            }
+
+            throw new InvalidCredentialsException("Invalid credentials");
+
         } catch (Exception e) {
             logger.error("Unexpected error during login for userId: {}", loginRequest.getUserId(), e);
             throw e;
@@ -420,7 +449,21 @@ public class UserAccountService {
         if(!request.getTempPassword().equals(user.getTempPassword())) {
             throw new RuntimeException("Passwords don't match");
         }
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        String oldPassword = request.getTempPassword();
+        String newPassword = request.getPassword();
+
+        // ✅ decrypt using OLD password
+//        String decryptedPhone = AESUtil.decrypt(String.valueOf(user.getPhoneNumber()), oldPassword);
+//        String decryptedEmail = AESUtil.decrypt(user.getEmailId(), oldPassword);
+
+        // ✅ re-encrypt using NEW password
+//        user.setPhoneNumber(Long.valueOf(AESUtil.encrypt(decryptedPhone, newPassword)));
+//        user.setEmailId(AESUtil.encrypt(decryptedEmail, newPassword));
+
+        // ✅ update password
+        user.setPassword(passwordEncoder.encode(newPassword));
+
         user.setTempPassword(null);
         user.setFirstLogin(false);
 
@@ -904,6 +947,33 @@ public class UserAccountService {
         return Map.of("token", newAccessToken);
     }
 
+    // helper for locking user if he try to login multiple times with bad credentials
+    private void increaseFailedAttempts(User user) {
+        int attempts = user.getFailedAttempts() + 1;
+        user.setFailedAttempts(attempts);
 
+        if (attempts >= MAX_LOGIN_ATTEMPTS) {
+            user.setAccountLocked(true);
+            user.setLockTime(LocalDateTime.now());
+            logger.warn("User {} locked due to too many failed attempts", user.getUserId());
+        }
+
+        repo.save(user);
+    }
+
+    private void resetFailedAttempts(User user) {
+        user.setFailedAttempts(0);
+        user.setAccountLocked(false);
+        user.setLockTime(null);
+        repo.save(user);
+    }
+
+    private boolean isUnlockTimeExpired(User user) {
+        if (user.getLockTime() == null) return true;
+
+        return user.getLockTime()
+                .plusMinutes(LOCK_DURATION_MINUTES)
+                .isBefore(LocalDateTime.now());
+    }
 }
  

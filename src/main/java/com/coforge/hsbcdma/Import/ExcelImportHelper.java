@@ -184,7 +184,7 @@ public class ExcelImportHelper {
                 demand.setDemandId(getLongValue(row.getCell(0)));
 
                 // ── Col B : RR Number ─────────────────────────────────────
-                demand.setRrNumber(getLongValue(row.getCell(1)));
+                demand.setRrNumber(getStringValue(row.getCell(1)));
 
                 // ── Col C : LOB ───────────────────────────────────────────
                 demand.setLob(resolveOrCreate(

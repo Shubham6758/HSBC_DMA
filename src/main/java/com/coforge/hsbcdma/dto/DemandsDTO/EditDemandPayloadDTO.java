@@ -12,7 +12,8 @@ import java.util.List;
 public class EditDemandPayloadDTO {
 
     // Editable primitives
-    private Long rrNumber;
+    private String rrNumber;
+    private Boolean rrFlag;
     private String experience;
     private String remark;
 

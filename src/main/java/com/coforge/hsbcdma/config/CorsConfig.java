@@ -18,7 +18,11 @@ public class CorsConfig {
 
         // ✅ VERY IMPORTANT: match your frontend exactly
         config.setAllowedOrigins(List.of(
-                "http://hsbcdma-frontend.s3-website.eu-north-1.amazonaws.com"
+                "http://hsbcdma-frontend.s3-website.eu-north-1.amazonaws.com",
+                "https://dpjkb3drfslw5.cloudfront.net",
+                "https://d7x8fqbqn42po.cloudfront.net/"
+
+
         ));
 
         // ✅ Browser preflight requires OPTIONS

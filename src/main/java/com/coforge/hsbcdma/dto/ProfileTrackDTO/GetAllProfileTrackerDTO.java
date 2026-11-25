@@ -41,7 +41,7 @@ public class GetAllProfileTrackerDTO {
         private Long demandId;
         private String displayDemandId;
 
-        private Long rrNumber;
+        private String rrNumber;
         private String fileName;
 
         // Other scalar fields

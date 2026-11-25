@@ -29,6 +29,7 @@ import com.coforge.hsbcdma.repository.OnboardingRepositories.WbsTypeRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackerStatusRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.StatusRepository;
+import com.coforge.hsbcdma.service.NotificationServices.NotificationService;
 import com.coforge.hsbcdma.service.ProfileTrackerServices.ProfileTrackService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -71,6 +72,7 @@ public class OnboardingService {
     private final ProfileTrackerAuditMeta profileTrackerAuditMeta;
 
     private final ProfileTrackService profileTrackService;
+    private final NotificationService notificationService;
 
 
     @Transactional
@@ -151,6 +153,22 @@ public class OnboardingService {
 
         // ---- detect bgv status change AFTER potentially setting it ----
         boolean bgvChanged = (req.getBgvStatusId() != null) && !Objects.equals(oldBgvStatusId, req.getBgvStatusId());
+//        if (bgvChanged && ob.getBgvStatus() != null) {
+//            try {
+//                notificationService.notifyUsers(
+//                        "ONBOARDING",
+//                        ob.getId(),
+//                        "BGV Status Updated",
+//                        "BGV status for profile "
+//                                + ob.getProfile().getCandidateName()
+//                                + " changed to "
+//                                + ob.getBgvStatus().getName(),
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                // optional log
+//            }
+//        }
 
 
 
@@ -169,6 +187,24 @@ public class OnboardingService {
                 (oldOs == null && newOs != null) ||
                         (oldOs != null && newOs != null && !Objects.equals(oldOs.getId(), newOs.getId()));
 
+//        if (onboardingStatusChanged && newOs != null) {
+//            try {
+//                notificationService.notifyUsers(
+//                        "ONBOARDING",
+//                        ob.getId(),
+//                        "Onboarding Status Updated",
+//                        "Onboarding status for profile "
+//                                + ob.getProfile().getCandidateName()
+//                                + " changed from "
+//                                + (oldOs != null ? oldOs.getName() : "N/A")
+//                                + " to "
+//                                + newOs.getName(),
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                // optional log
+//            }
+//        }
         // ---- Backout Rule: if status becomes Backout Candidate/Resign -> update PT & Demand ----
         changed |= applyOnboardingBackoutRuleIfNeeded(ob, onboardingStatusChanged, newOs);
 

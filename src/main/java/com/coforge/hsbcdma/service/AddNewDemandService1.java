@@ -68,7 +68,6 @@ public class AddNewDemandService1 {
     private String uploadDir;
 
 
-
     private static final Logger logger = LoggerFactory.getLogger(AddNewDemandService1.class);
 
     /**
@@ -393,7 +392,6 @@ public class AddNewDemandService1 {
 //    }
 
 
-
 //    public Page<GetAllDemandsResponse> getAllDemands1(int page, int size) {
 //
 //        Pageable pageable = PageRequest.of(page, size);
@@ -406,7 +404,8 @@ public class AddNewDemandService1 {
 
     public PageResponse getAllDemands1(int page, int size) {
 
-        Pageable pageable = PageRequest.of(page, size);
+//        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
 
         Page<AddDemand> demandsPage = addDemandRepository.findAllWithRefs(pageable);
 
@@ -501,6 +500,7 @@ public class AddNewDemandService1 {
         return GetAllDemandsResponse.builder()
                 .id(d.getId())
                 .flag(d.getFlag())
+                .rrFlag(d.getRrFlag())
 
                 .demandId(d.getDemandId())
                 .displayDemandId(displayDemandId)
@@ -571,8 +571,8 @@ public class AddNewDemandService1 {
     @Transactional(readOnly = true)
     public PageResponse searchDemands(DemandsFilterRequest filter, int page, int size) {
 
-        Pageable pageable = PageRequest.of(page, size);
-
+//        Pageable pageable = PageRequest.of(page, size);
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
         Page<AddDemand> demandsPage = addDemandRepository.findAll(
                 AddDemandSpecifications.byIds(filter)
                         .and(AddDemandSpecifications.byNames(filter)),
@@ -581,7 +581,6 @@ public class AddNewDemandService1 {
 
         return toPageResponse(demandsPage);
     }
-
 
 
     private PageResponse toPageResponse(Page<AddDemand> demandsPage) {
@@ -601,7 +600,6 @@ public class AddNewDemandService1 {
                 demandsPage.getTotalPages()
         );
     }
-
 
 
     private RefDTO ref(Object entity) {
@@ -656,6 +654,33 @@ public class AddNewDemandService1 {
 
         if (id == null && name == null) return null;
         return new RefDTO(id, name);
+    }
+
+
+    public PageResponse getRrFlaggedDemands(int page, int size) {
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "updatedAt")  // extra safety
+        );
+
+        Page<AddDemand> demandsPage = addDemandRepository.findAllRrFlagged(pageable);
+
+        List<GetAllDemandsResponse> content = demandsPage.getContent()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+
+        return new PageResponse(
+                content,
+                demandsPage.isEmpty(),
+                demandsPage.isFirst(),
+                demandsPage.isLast(),
+                demandsPage.getSize(),
+                demandsPage.getTotalElements(),
+                demandsPage.getTotalPages()
+        );
     }
 
 }

@@ -8,6 +8,7 @@ import com.coforge.hsbcdma.audit.JsonUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
@@ -83,4 +84,32 @@ public class GenericAuditService {
 
         return auditRepo.save(h);
     }
+
+    public <T> AuditHistory recordCreate(
+            AuditHistory.EntityType entityType,
+            T after,
+            SnapshotBuilder<T> snapshotBuilder,
+            AuditMetaExtractor<T> meta,
+            String userId
+    ) {
+        Map<String, Object> newSnap = snapshotBuilder.snapshot(after);
+
+        // ✅ Directly store snapshot (NO old/new wrapper)
+        Map<String, Object> createData = new LinkedHashMap<>(newSnap);
+
+        AuditHistory h = AuditHistory.builder()
+                .entityType(entityType)
+                .entityId(meta.entityId(after))
+                .demandId(meta.demandId(after))
+                .profileId(meta.profileId(after))
+                .profileTrackerId(meta.profileTrackerId(after))
+                .onboardingId(meta.onboardingId(after))
+                .action(AuditHistory.Action.CREATE)
+                .changedByUserId(meta.changedBy(after, userId))
+                .diff(jsonUtil.toJson(createData))   // ✅ only values
+                .build();
+
+        return auditRepo.save(h);
+    }
+
 }

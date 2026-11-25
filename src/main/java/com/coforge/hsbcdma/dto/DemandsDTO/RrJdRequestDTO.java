@@ -6,7 +6,8 @@ import lombok.Setter;
 @Getter
 @Setter
 public class RrJdRequestDTO {
-    private Long rrNumber;
+    private String rrNumber;
+    private Boolean rrFlag;
 
     // Choose one:
     private String fileName;     // must match MultipartFile.getOriginalFilename()

@@ -38,14 +38,12 @@ public class ProfilesFilterRequest {
     private Long locationId;
     private Long hbuId;
     private Long externalInternalId;
-    private Long profileStatusId;
 
-    // ---- ManyToOne by NAME ----
-    private String skillClusterName;
-    private String locationName;
-    private String hbuName;
-    private String externalInternalName;
-    private String profileStatusName;
+    // ---- ManyToOne by NAME (MULTI‑SELECT ✅) ----
+    private List<String> skillClusterNames;
+    private List<String> locationNames;
+    private List<String> hbuNames;
+    private List<String> externalInternalNames;
 
     // ---- ManyToMany ----
     private List<Long> primarySkillIds;
@@ -53,26 +51,36 @@ public class ProfilesFilterRequest {
     private List<String> primarySkillNames;
     private List<String> secondarySkillNames;
 
-    // ---- Ageing / billing (new fields) ----
+    // ---- Ageing / billing ----
     private Integer minAgeing;
     private Integer maxAgeing;
     private Double minBillingRate;
     private Double maxBillingRate;
 
-    // ---- Other new scalar filters ----
-    private String practice;
-    private String band;
-    private String lobShared;
-    private String projectCode;
-
-    // ---- RDG / origin fields (new masters) ----
+    // ---- RDG / origin masters ----
     private Long originId;
     private Long karatStatusId;
     private Long sourceId;
     private Long overallStatusRdgId;
 
-    private String originName;
-    private String karatStatusName;
-    private String sourceName;
-    private String overallStatusRdgName;
+    private List<String> originNames;
+    private List<String> karatStatusNames;
+    private List<String> sourceNames;
+    private List<String> overallStatusRdgNames;
+
+
+    // ---- Profile Status ----
+    private Long profileStatusId;
+    private List<String> profileStatusNames;
+
+
+    // ================= TEXT FIELDS =================
+    private String karatReadiness;
+    private String lobShared;
+    private String practice;
+    private String band;
+    private String ageingRange;
+    private String codes;
+    private String codeType;
+
 }

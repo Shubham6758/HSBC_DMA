@@ -54,7 +54,7 @@ public record ProfileExportDTO(
         LocalDate l1InterviewDate,
         String currentLocation,
         String officialNP,
-        LocalDate negotiableNpLwd,
+        String negotiableNpLwd,
         String recruiter,
 
         String primarySkills,

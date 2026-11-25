@@ -164,7 +164,7 @@ public class ProfileExcelImportHelper {
                     p.setL1InterviewDate(ExcelDateHelper.read(row.getCell(36)));
                     p.setCurrentLocation(getString(row.getCell(37)));
                     p.setOfficialNP(getString(row.getCell(38)));
-                    p.setNegotiableNpLwd(ExcelDateHelper.read(row.getCell(39)));
+                    p.setNegotiableNpLwd(getString(row.getCell(39)));
                     p.setRecruiter(getString(row.getCell(40)));
 
                     profiles.add(p);
@@ -236,8 +236,12 @@ public class ProfileExcelImportHelper {
             BiConsumer<T, String> setter,
             Function<T, T> saveFn) {
 
+        if (raw == null || raw.trim().isEmpty()) {
+            return null;   // ✅ DO NOT CREATE MASTER
+        }
+
         String k = key(raw);
-        if (k == null) return null;
+
 
         if (cache.containsKey(k)) return cache.get(k);
 
@@ -266,6 +270,8 @@ public class ProfileExcelImportHelper {
         if (csv == null) return set;
 
         for (String val : csv.split(",")) {
+            if (val == null || val.trim().isEmpty()) continue;   // ✅ SKIP EMPTY
+
             T t = resolveOrCreate(val.trim(), cache, finder, factory, setter, saveFn);
             if (t != null) set.add(t);
         }
@@ -274,9 +280,13 @@ public class ProfileExcelImportHelper {
 
     // ----------------------------------------------------------
     // ✅ CELL HELPERS
-
     private String getString(Cell c) {
-        return c == null ? null : c.toString().trim();
+
+        if (c == null) return null;
+
+        String value = c.toString().trim();
+
+        return value.isEmpty() ? null : value;   // ✅ convert empty → null
     }
 
     private Long getLong(Cell c) {
@@ -304,15 +314,30 @@ public class ProfileExcelImportHelper {
         }
     }
 
+
     private Float getFloat(Cell c) {
-        try { return (float) c.getNumericCellValue(); }
-        catch (Exception e) { return null; }
+
+        try {
+            float val = (float) c.getNumericCellValue();
+            return val == 0 ? null : val;   // ✅ optional (based on business rule)
+        } catch (Exception e) {
+            return null;
+        }
     }
 
+
+
     private Boolean getBoolean(Cell c) {
-        if (c == null) return true;
-        return c.toString().equalsIgnoreCase("true") || c.toString().equals("1");
+
+        if (c == null) return null; // ✅ instead of true
+
+        String val = c.toString().trim();
+
+        if (val.isEmpty()) return null;
+
+        return val.equalsIgnoreCase("true") || val.equals("1");
     }
+
 
     private boolean isRowEmpty(Row row) {
         for (Cell c : row) {

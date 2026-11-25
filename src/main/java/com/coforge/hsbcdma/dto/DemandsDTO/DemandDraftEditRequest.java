@@ -54,7 +54,7 @@ public class DemandDraftEditRequest {
         private Long rrDraftId;       // best if you store rr row id
         private Integer positionIndex; // fallback: 1..N in UI order
 
-        private Long rrNumber;
+        private String rrNumber;
 
         // keep your earlier field
         private String fileName; // server overwrites with stored filename

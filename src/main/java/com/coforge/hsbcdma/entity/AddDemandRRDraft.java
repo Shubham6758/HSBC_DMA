@@ -26,7 +26,7 @@ public class AddDemandRRDraft extends BaseEntity{
 //    private Long demandId;   // numeric 868, 869, ...
 
     @Column(name = "rr_number")
-    private Long rrNumber;
+    private String rrNumber;
 
 
     @Column(name = "is_subcon_rr")

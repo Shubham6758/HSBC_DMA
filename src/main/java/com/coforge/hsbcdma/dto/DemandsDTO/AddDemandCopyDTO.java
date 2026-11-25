@@ -17,7 +17,7 @@ public class AddDemandCopyDTO {
     private LocalDate p1FlagDate;
 
     private Long demandId;
-    private Long rrNumber;
+    private String rrNumber;
     private LocalDate demandReceivedDate;
 
     private String experience;

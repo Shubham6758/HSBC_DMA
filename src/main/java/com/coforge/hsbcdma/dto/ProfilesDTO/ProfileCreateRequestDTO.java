@@ -31,7 +31,6 @@ public class ProfileCreateRequestDTO {
     private String summary;
 
     // New
-    @jakarta.validation.constraints.Pattern(regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$", message = "Invalid PAN format")
     private String panNumber;
 
 
@@ -39,6 +38,13 @@ public class ProfileCreateRequestDTO {
     private Set<Long> secondarySkillsIds;
 
     // Naye fields
+
+    private LocalDate l1InterviewDate;
+    private String currentLocation;
+    private String officialNP;
+    private String negotiableNpLwd;
+    private String recruiter;
+
     private Long originId;
     private Long karatStatusId;
     private Long sourceId;

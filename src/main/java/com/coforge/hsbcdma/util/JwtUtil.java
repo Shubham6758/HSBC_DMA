@@ -28,7 +28,7 @@ public class JwtUtil {
     private String secret;
 
     // ------------------ Generate Token ------------------
-    public String generateToken(String username, String roleName, List<ModuleChildModuleDTO> modules) {
+    public String generateToken(String username, String roleName, List<ModuleChildModuleDTO> modules)  {
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("role", roleName);

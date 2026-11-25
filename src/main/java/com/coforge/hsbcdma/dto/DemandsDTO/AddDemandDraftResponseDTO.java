@@ -18,7 +18,7 @@ public class AddDemandDraftResponseDTO {
     private Integer numberOfPositions;
     private Boolean karatFlag;
     private String experience;
-//    private String fileName;
+    //    private String fileName;
     private String remark;
     private LocalDate demandReceivedDate;
 
@@ -59,7 +59,7 @@ public class AddDemandDraftResponseDTO {
     @NoArgsConstructor
     public static class AddDemandRRDraftDTO {
         private Long id;
-        private Long rrNumber;
+        private String rrNumber;
         private String fileName;
     }
 

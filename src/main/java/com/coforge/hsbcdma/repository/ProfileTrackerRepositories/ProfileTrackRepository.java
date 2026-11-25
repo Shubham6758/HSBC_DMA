@@ -2,12 +2,10 @@ package com.coforge.hsbcdma.repository.ProfileTrackerRepositories;
 
 
 import com.coforge.hsbcdma.entity.ProfileTracker;
+import com.coforge.hsbcdma.entity.dropdownEntities.Profile.ProfileTrackerStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.jpa.repository.EntityGraph;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
-import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
@@ -50,4 +48,14 @@ public interface ProfileTrackRepository extends JpaRepository<ProfileTracker, Lo
 """)
     long countClientSelectedForOtherDemand(@Param("profileId") Long profileId,
                                            @Param("demandId") Long demandId);
+
+
+    @Modifying
+    @Query("""
+    UPDATE ProfileTracker pt
+    SET pt.profileTrackerStatus = :status
+    WHERE pt.demand.id = :demandId
+""")
+    int updateStatusByDemandId(@Param("demandId") Long demandId,
+                               @Param("status") ProfileTrackerStatus status);
 }

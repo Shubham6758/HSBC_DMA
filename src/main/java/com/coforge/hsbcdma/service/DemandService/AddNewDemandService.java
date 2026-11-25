@@ -1,4 +1,5 @@
 package com.coforge.hsbcdma.service.DemandService;
+
 import com.coforge.hsbcdma.audit.AddDemandAuditService;
 import com.coforge.hsbcdma.audit.AddDemandSnapshot1Builder;
 import com.coforge.hsbcdma.audit.AuditHistory;
@@ -9,11 +10,18 @@ import com.coforge.hsbcdma.entity.AddDemand;
 import com.coforge.hsbcdma.entity.Location;
 import com.coforge.hsbcdma.entity.User;
 import com.coforge.hsbcdma.entity.dropdownEntities.*;
+import com.coforge.hsbcdma.entity.dropdownEntities.Onboarding.OnboardingStatus;
+import com.coforge.hsbcdma.entity.dropdownEntities.Profile.ProfileTrackerStatus;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRRDraftRepository;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRepository;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandsDraftRepository;
+import com.coforge.hsbcdma.repository.OnboardingRepositories.OnboardingRepository;
+import com.coforge.hsbcdma.repository.OnboardingRepositories.OnboardingStatusRepository;
+import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackRepository;
+import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackerStatusRepository;
 import com.coforge.hsbcdma.repository.UserAccountRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.StatusRepository;
+import com.coforge.hsbcdma.service.NotificationServices.NotificationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -57,6 +65,11 @@ public class AddNewDemandService {
     private final GenericAuditService genericAuditService;
 
     private final StatusRepository statusRepository;
+    private final NotificationService notificationService;
+    private final ProfileTrackerStatusRepository profileTrackerStatusRepository;
+    private final ProfileTrackRepository profileTrackRepository;
+    private final OnboardingStatusRepository onboardingStatusRepository;
+    private final OnboardingRepository onboardingRepository;
 
     @Value("${app.jd.storage-path}")
     private String storagePath;
@@ -113,16 +126,16 @@ public class AddNewDemandService {
             throw new IllegalArgumentException("rrs size must match numberOfPositions");
 
         // Validate rrNumbers present + unique in request
-        Set<Long> seen = new HashSet<>();
+        Set<String> seen = new HashSet<>();
         for (RrJdRequestDTO rr : payload.getRrs()) {
-            if (rr.getRrNumber() == null)
+            if (rr.getRrNumber() == null || rr.getRrNumber().isBlank())
                 throw new IllegalArgumentException("rrNumber is required for each position");
             if (!seen.add(rr.getRrNumber()))
                 throw new IllegalArgumentException("Duplicate rrNumber in payload: " + rr.getRrNumber());
         }
 
         // Validate rrNumbers not already in DB (rr_number is UNIQUE)
-        List<Long> existing = finalRepo.findExistingRrNumbers(seen);
+        List<String> existing = finalRepo.findExistingRrNumbers(seen);
         if (!existing.isEmpty())
             throw new IllegalArgumentException("rrNumber already exists in DB: " + existing);
 
@@ -184,6 +197,7 @@ public class AddNewDemandService {
 
             // do NOT set demandId
             fin.setRrNumber(rr.getRrNumber());
+            fin.setRrFlag(rr.getRrFlag()); // nullable, no validation needed
 
             // copy common fields
             applyCommonFields(payload, fin);
@@ -237,7 +251,29 @@ public class AddNewDemandService {
 
             finalRepo.save(fin);
 //            for history
-            auditService.recordCreate(fin);
+//            auditService.recordCreate(fin);
+
+//            try {
+//                notificationService.notifyUsers(
+//                        "DEMAND",
+//                        fin.getId(),  // reference_id
+//                        "New Demand Created",
+//                        "Demand " + prefix + "-" + fin.getDemandId()
+//                                + " has been created",
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                log.error("🔥 Notification FAILURE", e);
+//                throw e; // TEMP: so you can see error
+//            }
+            genericAuditService.recordCreate(
+                    AuditHistory.EntityType.ADD_DEMAND,
+                    fin,
+                    addDemandSnapshotBuilder,
+                    addDemandAuditMeta,
+                    getCurrentUserId()  // or logged-in user
+            );
+
 
             // response only displayDemandId
             displayIds.add(prefix + "-" + realDemandId);
@@ -249,7 +285,51 @@ public class AddNewDemandService {
         return out;
 
     }
+    /**
+     * when priority changes from p1 to p2 or p0 to p2 then
+     * demand -> demand abandoned
+     * PT -> demand Abandoned
+     * */
+    private void handlePriorityDowngradeToP2(AddDemand demand, String oldPriorityCode) {
 
+        if (oldPriorityCode == null || demand.getPriority() == null) return;
+
+        String newPriorityCode = demand.getPriority().getName();
+
+        boolean moveToP2 =
+                ("P0".equalsIgnoreCase(oldPriorityCode) || "P1".equalsIgnoreCase(oldPriorityCode)) &&
+                        "P2".equalsIgnoreCase(newPriorityCode);
+
+        if (!moveToP2) return;
+
+        // ✅ 1. Update Demand Status → Demand Abandoned
+        Status abandonedStatus = statusRepository.findByStatusIgnoreCase("Demand Abandoned")
+                .orElseThrow(() -> new IllegalStateException("Demand Abandoned status not found"));
+
+        demand.setStatus(abandonedStatus);
+
+        // ✅ 2. Update ALL ProfileTracker Status → Demand Abandoned
+        ProfileTrackerStatus ptAbandonedStatus =
+                profileTrackerStatusRepository.findByNameIgnoreCase("Demand Abandoned")
+                        .orElseThrow(() -> new IllegalStateException("ProfileTracker Demand Abandoned status not found"));
+
+        profileTrackRepository.updateStatusByDemandId(
+                demand.getId(),
+                ptAbandonedStatus
+        );
+
+
+        // ✅ 3. Update ALL Onboarding Status → Demand Abandoned
+        OnboardingStatus onboardingAbandonedStatus =
+                onboardingStatusRepository.findByNameIgnoreCase("Demand Abandoned")
+                        .orElseThrow(() -> new IllegalStateException("Onboarding Demand Abandoned status not found"));
+
+        onboardingRepository.updateStatusByDemandId(
+                demand.getId(),
+                onboardingAbandonedStatus
+        );
+
+    }
     /**
      * when priority p2 then p1 flag date null otherwise current date
      * */
@@ -358,12 +438,13 @@ public class AddNewDemandService {
         Map<String, Object> oldSnap = addDemandSnapshotBuilder.snapshot(demand);
 
         // capture old priority before update
+        Status oldStatus = demand.getStatus();
         String oldPriorityCode = demand.getPriority() != null ? demand.getPriority().getName() : null;
 
         // 0) RR uniqueness validation (because rr_number is UNIQUE)
         if (dto.getRrNumber() != null) {
-            Long newRr = dto.getRrNumber();
-            Long currentRr = demand.getRrNumber();
+            String newRr = dto.getRrNumber();
+            String currentRr = demand.getRrNumber();
 
             // validate only if rr is changing
             if (currentRr == null || !newRr.equals(currentRr)) {
@@ -376,6 +457,7 @@ public class AddNewDemandService {
 
         // 1) Update editable scalar fields
         setIfNotNull(dto.getRrNumber(), demand::setRrNumber);
+        setIfNotNull(dto.getRrFlag(), demand::setRrFlag);
         setIfNotNull(dto.getExperience(), demand::setExperience); // String now
         setIfNotNull(dto.getRemark(), demand::setRemark);
 
@@ -448,7 +530,7 @@ public class AddNewDemandService {
             boolean hasText = dto.getJdText() != null && !dto.getJdText().isBlank();
 
             if (hasFile || hasText) {
-                Long rrToUse = (dto.getRrNumber() != null) ? dto.getRrNumber() : demand.getRrNumber();
+                String rrToUse = (dto.getRrNumber() != null) ? dto.getRrNumber() : demand.getRrNumber();
 
                 RrJdRequestDTO rr = new RrJdRequestDTO();
                 rr.setRrNumber(rrToUse);
@@ -466,6 +548,10 @@ public class AddNewDemandService {
         demand.setUpdatedByName(getCurrentUserName());
 
 
+        handlePriorityDowngradeToP2(demand, oldPriorityCode);
+
+
+
         // 4) Apply P1 flag date logic
         applyP1FlagDateIfNeeded(demand, oldPriorityCode);
 
@@ -475,6 +561,32 @@ public class AddNewDemandService {
 
 
 //        auditService.recordUpdate(demand, oldSnap);
+//        try {
+//            Status newStatus = demand.getStatus();
+//
+//            boolean statusChanged =
+//                    oldStatus == null ||
+//                            !Objects.equals(oldStatus.getId(), newStatus != null ? newStatus.getId() : null);
+//
+//            if (statusChanged && newStatus != null) {
+//
+//                notificationService.notifyUsers(
+//                        "DEMAND",
+//                        demand.getId(),
+//                        "Demand Status Updated",
+//                        "Demand " + resolveLobPrefix(demand.getLob() != null ? demand.getLob().getId() : null)
+//                                + "-" + demand.getDemandId()
+//                                + " status changed from "
+//                                + (oldStatus != null ? oldStatus.getStatus() : "N/A")
+//                                + " to "
+//                                + newStatus.getStatus(),
+//                        getCurrentUserId()
+//                );
+//            }
+//
+//        } catch (Exception e) {
+//            log.warn("Failed to send demand status notification: {}", e.getMessage());
+//        }
 
 
         genericAuditService.recordUpdate(
@@ -520,7 +632,7 @@ public class AddNewDemandService {
         dto.setKaratFlag(source.getKaratFlag());
         dto.setP1FlagDate(source.getP1FlagDate());
         dto.setExperience(source.getExperience());
-        dto.setRemark("Copied from Demand PK ID " + sourceDemandPkId);
+//        dto.setRemark("Copied from Demand PK ID " + sourceDemandPkId);
 
         /* ---------- BUSINESS ---------- */
         dto.setDemandId(source.getDemandId());
@@ -562,7 +674,6 @@ public class AddNewDemandService {
 
         return dto; // ✅ preview only, no DB insert
     }
-
 
     /**
      *  When priority change from p2 to p1 or p0 then set p1flag to current date

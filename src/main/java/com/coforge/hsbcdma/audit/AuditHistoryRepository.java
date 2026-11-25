@@ -28,6 +28,7 @@ public interface AuditHistoryRepository extends JpaRepository<AuditHistory,Long>
       and (
             (h.entityType = com.coforge.hsbcdma.audit.AuditHistory$EntityType.ADD_DEMAND
                  and h.action in (
+                        com.coforge.hsbcdma.audit.AuditHistory$Action.CREATE,
                      com.coforge.hsbcdma.audit.AuditHistory$Action.UPDATE_DEMAND
                  )
             )
@@ -58,6 +59,7 @@ public interface AuditHistoryRepository extends JpaRepository<AuditHistory,Long>
       and (
             (h.entityType = com.coforge.hsbcdma.audit.AuditHistory.EntityType.PROFILE
                  and h.action in (
+                        com.coforge.hsbcdma.audit.AuditHistory$Action.CREATE,
                      com.coforge.hsbcdma.audit.AuditHistory.Action.UPDATE_PROFILE
                  )
             )

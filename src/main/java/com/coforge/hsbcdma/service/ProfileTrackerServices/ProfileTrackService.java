@@ -169,6 +169,7 @@ public class ProfileTrackService {
         }
 
 
+
         // 10) Prepare response
         List<Long> skipped = requestedProfileIds.stream()
                 .filter(alreadyAttachedProfileIds::contains)
@@ -273,7 +274,7 @@ public class ProfileTrackService {
 
         // 9) Bulk save
         trackerRepository.saveAll(tracksToSave);
-        // 9b) Send notifications for newly attached demands
+//         9b) Send notifications for newly attached demands
         try {
             for (ProfileTracker pt : tracksToSave) {
 
@@ -488,7 +489,13 @@ public class ProfileTrackService {
                 changed = true;
             }
         }
+        // ✅ STRICT CHECK: prevent same profile onboarding for multiple demands
+        if (profileTrackerStatusChanged
+                && newPts != null
+                && "Client Selected".equalsIgnoreCase(newPts.getName())) {
 
+            validateUniqueClientSelection(pt);  // 🚫 BLOCK HERE
+        }
         if (profileTrackerStatusChanged) {
 
             notificationService.notifyAllUsersExceptActor(
@@ -513,13 +520,7 @@ public class ProfileTrackService {
 //        // 🔁 Rule: If PT status changed to "Client Cliented" -> create onboarding & set demand to "Demand Fulfilled"
 //        changed |= applyClientSelectedRuleIfNeeded(pt, profileTrackerStatusChanged, newPts);
 
-        // ✅ STRICT CHECK: prevent same profile onboarding for multiple demands
-        if (profileTrackerStatusChanged
-                && newPts != null
-                && "Client Selected".equalsIgnoreCase(newPts.getName())) {
 
-            validateUniqueClientSelection(pt);  // 🚫 BLOCK HERE
-        }
 
         // ✅ Only runs if validation passed
         changed |= applyClientSelectedRuleIfNeeded(pt, profileTrackerStatusChanged, newPts);
@@ -839,6 +840,21 @@ public class ProfileTrackService {
 
             onboarding.setOnboardingStatus(inProgress);
             onboardingRepository.save(onboarding);
+//            try {
+//                notificationService.notifyUsers(
+//                        "ONBOARDING",
+//                        onboarding.getId(),
+//                        "Onboarding Created",
+//                        "Onboarding initiated for profile "
+//                                + onboarding.getProfile().getCandidateName()
+//                                + " for Demand "
+//                                + resolveDemandPrefix(onboarding.getDemand()) + "-"
+//                                + onboarding.getDemand().getDemandId(),
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                log.warn("Failed to send onboarding creation notification: {}", e.getMessage());
+//            }
             updated = true;
 
             // (Optional) If you have onboarding snapshot/audit meta, you can also audit this as ATTACH:

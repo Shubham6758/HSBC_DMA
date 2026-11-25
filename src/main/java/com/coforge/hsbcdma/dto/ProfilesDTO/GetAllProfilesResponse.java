@@ -52,7 +52,7 @@ public class GetAllProfilesResponse {
 
     private String officialNP;
 
-    private LocalDate negotiableNpLwd;
+    private String negotiableNpLwd;
 
     private String recruiter;private RefDTO origin;
     private RefDTO karatStatus;

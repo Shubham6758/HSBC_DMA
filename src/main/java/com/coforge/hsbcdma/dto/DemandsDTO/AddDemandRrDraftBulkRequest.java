@@ -19,7 +19,7 @@ public class AddDemandRrDraftBulkRequest {
 
     @Data
     public static class RrDraftRequest {
-        private Long rrNumber;
+        private String rrNumber;
         private String fileName;     // JD file position in files[]
         private String jdText;         // optional alternative
         private String filenameHint;   // optional
