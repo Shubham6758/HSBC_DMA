@@ -43,6 +43,4 @@ target/
 .DS_Store
 
 # Env files
-application.properties
-application.yml
 .env
