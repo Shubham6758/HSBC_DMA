@@ -3,6 +3,8 @@ package com.coforge.hsbcdma.service.ProfileTrackerServices;
 import com.coforge.hsbcdma.audit.AuditHistory;
 import com.coforge.hsbcdma.audit.Demand.AddDemandAuditMeta;
 import com.coforge.hsbcdma.audit.Demand.AddDemandSnapshotBuilder;
+import com.coforge.hsbcdma.audit.Profile.ProfileAuditMeta;
+import com.coforge.hsbcdma.audit.Profile.ProfileSnapshotBuilder;
 import com.coforge.hsbcdma.audit.ProfileTracker.ProfileTrackerAuditMeta;
 import com.coforge.hsbcdma.audit.ProfileTracker.ProfileTrackerAuditService;
 import com.coforge.hsbcdma.audit.ProfileTracker.ProfileTrackerSnapshotBuilder;
@@ -13,6 +15,7 @@ import com.coforge.hsbcdma.dto.ProfileTrackDTO.*;
 import com.coforge.hsbcdma.entity.*;
 import com.coforge.hsbcdma.entity.dropdownEntities.Onboarding.OnboardingStatus;
 import com.coforge.hsbcdma.entity.dropdownEntities.Profile.EvaluationStatus;
+import com.coforge.hsbcdma.entity.dropdownEntities.Profile.ProfileStatus;
 import com.coforge.hsbcdma.entity.dropdownEntities.Profile.ProfileTrackerStatus;
 import com.coforge.hsbcdma.entity.dropdownEntities.Status;
 import com.coforge.hsbcdma.exception.ResourceNotFoundException;
@@ -20,6 +23,7 @@ import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRepository;
 import com.coforge.hsbcdma.repository.OnboardingRepositories.OnboardingRepository;
 import com.coforge.hsbcdma.repository.OnboardingRepositories.OnboardingStatusRepository;
 import com.coforge.hsbcdma.repository.ProfileRepositories.ProfileRepository;
+import com.coforge.hsbcdma.repository.ProfileRepositories.ProfileStatusRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.EvaluationStatusRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackerStatusRepository;
@@ -57,6 +61,9 @@ public class ProfileTrackService {
     private final OnboardingStatusRepository onboardingStatusRepository;
     private final ProfileTrackerAuditService profileTrackerAuditService;
     private final StatusRepository statusRepository;
+    private final ProfileStatusRepository profileStatusRepository;
+    private final ProfileSnapshotBuilder profileSnapshotBuilder;
+    private final ProfileAuditMeta profileAuditMeta;
 
     private final ProfileTrackerSnapshotBuilder profileTrackerSnapshotBuilder;
     private final GenericAuditService genericAuditService;
@@ -105,6 +112,11 @@ public class ProfileTrackService {
         List<Profile> profiles = profileRepository.findAllById(requestedProfileIds);
         Set<Long> foundProfileIds = profiles.stream().map(Profile::getId).collect(Collectors.toSet());
 
+        // Checking if profile have status as Client Selected
+        for (Profile profile : profiles) {
+            validateProfileCanBeAttached(profile);
+        }
+
         // 5) Fail fast if any profileIds are missing (production safe)
         List<Long> missingProfileIds = requestedProfileIds.stream()
                 .filter(id -> !foundProfileIds.contains(id))
@@ -121,6 +133,20 @@ public class ProfileTrackService {
         Set<Long> alreadyAttachedProfileIds = existing.stream()
                 .map(pt -> pt.getProfile().getId())
                 .collect(Collectors.toSet());
+
+//        // Also count of active profiles
+//        long activeProfileCount =
+//                trackerRepository.countActiveProfilesForDemand(req.getDemandPkId());
+//
+//        long newProfilesCount = requestedProfileIds.stream()
+//                .filter(id -> !alreadyAttachedProfileIds.contains(id))
+//                .count();
+//
+//        if (activeProfileCount + newProfilesCount > 2) {
+//            throw new IllegalStateException(
+//                    "Only 2 active profiles can be attached to this demand."
+//            );
+//        }
 
         // 7) Compute which profileIds to create
         List<Long> toCreateProfileIds = requestedProfileIds.stream()
@@ -147,6 +173,23 @@ public class ProfileTrackService {
         // 9) Bulk save
         trackerRepository.saveAll(tracksToSave);
 
+        // Changing profile status
+        ProfileStatus profileAttachedStatus = profileStatusRepository
+                .findByNameIgnoreCase("Profile Attached to a Demand")
+                .orElseThrow(() -> new IllegalStateException(
+                        "Profile Status 'Profile Attached to a Demand' not found"));
+
+        for (Profile profile : profiles) {
+
+            if (toCreateProfileIds.contains(profile.getId())) {
+
+                profile.setProfileStatus(profileAttachedStatus);
+                profile.setUpdatedByUserId(getCurrentUserId());
+
+                profileRepository.save(profile);
+            }
+        }
+
         // 9b) Send notifications for newly attached profiles
         try {
             for (ProfileTracker pt : tracksToSave) {
@@ -167,6 +210,7 @@ public class ProfileTrackService {
         } catch (Exception e) {
             log.warn("Failed to create attachment notifications: {}", e.getMessage());
         }
+
 
 
         // 10) Prepare response
@@ -228,6 +272,9 @@ public class ProfileTrackService {
         Profile profile = profileRepository.findById(req.getProfilePkId())
                 .orElseThrow(() -> new RuntimeException("Profile not found: " + req.getProfilePkId()));
 
+        // Checking if profile have status as Client Selected
+        validateProfileCanBeAttached(profile);
+
         // 4) Load all demands in one query
         List<AddDemand> demands = demandRepository.findAllById(requestedDemandIds);
         Set<Long> foundDemandIds = demands.stream().map(AddDemand::getId).collect(Collectors.toSet());
@@ -247,6 +294,26 @@ public class ProfileTrackService {
         Set<Long> alreadyAttachedDemandIds = existing.stream()
                 .map(pt -> pt.getDemand().getId())
                 .collect(Collectors.toSet());
+
+//        // Also count of active profiles
+//        for (AddDemand demand : demands) {
+//            boolean alreadyAttached =
+//                    alreadyAttachedDemandIds.contains(demand.getId());
+//
+//            if (!alreadyAttached) {
+//
+//                long activeProfileCount =
+//                        trackerRepository.countActiveProfilesForDemand(demand.getId());
+//
+//                if (activeProfileCount >= 2) {
+//                    throw new IllegalStateException(
+//                            "Demand " + resolveDemandPrefix(demand) + "-"
+//                                    + demand.getDemandId()
+//                                    + " already has maximum 2 active profiles."
+//                    );
+//                }
+//            }
+//        }
 
         // 7) Compute which demandIds to create
         List<Long> toCreateDemandIds = requestedDemandIds.stream()
@@ -273,7 +340,19 @@ public class ProfileTrackService {
 
         // 9) Bulk save
         trackerRepository.saveAll(tracksToSave);
-        // 9b) Send notifications for newly attached demands
+
+        // Changing profile status
+        ProfileStatus profileAttachedStatus = profileStatusRepository
+                .findByNameIgnoreCase("Profile Attached to a Demand")
+                .orElseThrow(() -> new IllegalStateException(
+                        "Profile Status 'Profile Attached to a Demand' not found"));
+
+        profile.setProfileStatus(profileAttachedStatus);
+        profile.setUpdatedByUserId(getCurrentUserId());
+
+        profileRepository.save(profile);
+
+//         9b) Send notifications for newly attached demands
         try {
             for (ProfileTracker pt : tracksToSave) {
 
@@ -350,6 +429,7 @@ public class ProfileTrackService {
                 .hbu(toRef(p.getHbu()))
                 .profileTrackerStatus(toRef(tracker.getProfileTrackerStatus()))
                 .evaluationStatus(toRef(tracker.getEvaluationStatus()))
+                .skillCluster(toRef(tracker.getProfile().getSkillCluster()))
                 .build();
     }
 
@@ -488,7 +568,13 @@ public class ProfileTrackService {
                 changed = true;
             }
         }
+        // ✅ STRICT CHECK: prevent same profile onboarding for multiple demands
+        if (profileTrackerStatusChanged
+                && newPts != null
+                && "Client Selected".equalsIgnoreCase(newPts.getName())) {
 
+            validateUniqueClientSelection(pt);  // 🚫 BLOCK HERE
+        }
         if (profileTrackerStatusChanged) {
 
             notificationService.notifyAllUsersExceptActor(
@@ -513,13 +599,7 @@ public class ProfileTrackService {
 //        // 🔁 Rule: If PT status changed to "Client Cliented" -> create onboarding & set demand to "Demand Fulfilled"
 //        changed |= applyClientSelectedRuleIfNeeded(pt, profileTrackerStatusChanged, newPts);
 
-        // ✅ STRICT CHECK: prevent same profile onboarding for multiple demands
-        if (profileTrackerStatusChanged
-                && newPts != null
-                && "Client Selected".equalsIgnoreCase(newPts.getName())) {
 
-            validateUniqueClientSelection(pt);  // 🚫 BLOCK HERE
-        }
 
         // ✅ Only runs if validation passed
         changed |= applyClientSelectedRuleIfNeeded(pt, profileTrackerStatusChanged, newPts);
@@ -839,6 +919,21 @@ public class ProfileTrackService {
 
             onboarding.setOnboardingStatus(inProgress);
             onboardingRepository.save(onboarding);
+//            try {
+//                notificationService.notifyUsers(
+//                        "ONBOARDING",
+//                        onboarding.getId(),
+//                        "Onboarding Created",
+//                        "Onboarding initiated for profile "
+//                                + onboarding.getProfile().getCandidateName()
+//                                + " for Demand "
+//                                + resolveDemandPrefix(onboarding.getDemand()) + "-"
+//                                + onboarding.getDemand().getDemandId(),
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                log.warn("Failed to send onboarding creation notification: {}", e.getMessage());
+//            }
             updated = true;
 
             // (Optional) If you have onboarding snapshot/audit meta, you can also audit this as ATTACH:
@@ -880,6 +975,43 @@ public class ProfileTrackService {
                         addDemandAuditMeta,
                         getCurrentUserId()
                 );
+                updated = true;
+            }
+        }
+
+        // 3) Profile status -> Client Selected
+        Profile profile = pt.getProfile();
+
+        if (profile != null) {
+
+            ProfileStatus clientSelectedStatus = profileStatusRepository
+                    .findByNameIgnoreCase("Client Selected")
+                    .orElseThrow(() -> new IllegalStateException(
+                            "ProfileStatus 'Client Selected' not found"));
+
+            boolean needsUpdate =
+                    profile.getProfileStatus() == null
+                            || !Objects.equals(
+                            profile.getProfileStatus().getId(),
+                            clientSelectedStatus.getId());
+
+            if (needsUpdate) {
+                Map<String, Object> oldProfileSnap = profileSnapshotBuilder.snapshot(profile);
+                profile.setProfileStatus(clientSelectedStatus);
+                profile.setUpdatedByUserId(getCurrentUserId());
+
+                profileRepository.save(profile);
+
+                genericAuditService.recordUpdate(
+                        AuditHistory.EntityType.PROFILE,
+                        AuditHistory.Action.UPDATE_PROFILE,
+                        profile,
+                        oldProfileSnap,
+                        profileSnapshotBuilder,
+                        profileAuditMeta,
+                        getCurrentUserId()
+                );
+
                 updated = true;
             }
         }
@@ -1172,5 +1304,130 @@ public class ProfileTrackService {
             return d.getLob().getLob();             // CIB
         }
         return "NA";
+    }
+
+    private void validateProfileCanBeAttached(Profile profile) {
+
+        // Profile Status check
+        if (profile.getProfileStatus() != null
+                && "Client Selected".equalsIgnoreCase(
+                profile.getProfileStatus().getName())) {
+            throw new IllegalStateException(
+                    "Profile is already Client Selected."
+            );
+        }
+
+        // Tracker Status check
+        long count =
+                trackerRepository.countClientSelectedForProfile(profile.getId());
+
+        if (count > 0) {
+            throw new IllegalStateException(
+                    "Profile is already Client Selected for another demand."
+            );
+        }
+    }
+
+    @Transactional
+    public String removeProfileFromDemand(Long trackerId) {
+
+        ProfileTracker pt = trackerRepository.findById(trackerId)
+                .orElseThrow(() ->
+                        new RuntimeException(
+                                "ProfileTracker not found: " + trackerId));
+
+        String currentStatus =
+                pt.getProfileTrackerStatus() != null
+                        ? pt.getProfileTrackerStatus().getName()
+                        : "";
+
+        // Prevent removals for critical statuses
+        if (
+                "Client Selected".equalsIgnoreCase(currentStatus)
+                        || onboardingRepository.existsByProfileTracker_Id(pt.getId())
+        ) {
+            throw new IllegalStateException(
+                    "Profile cannot be removed from demand in status "
+                            + currentStatus
+            );
+        }
+
+        Map<String, Object> oldSnap =
+                profileTrackerSnapshotBuilder.snapshot(pt);
+
+        ProfileTrackerStatus removedStatus =
+                profileTrackerStatusRepository
+                        .findByNameIgnoreCase("Removed From Demand")
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "ProfileTrackerStatus 'Removed From Demand' not found"));
+
+        pt.setProfileTrackerStatus(removedStatus);
+        pt.setUpdatedByUserId(getCurrentUserId());
+
+        trackerRepository.save(pt);
+
+        genericAuditService.recordUpdate(
+                AuditHistory.EntityType.PROFILE_TRACKER,
+                AuditHistory.Action.UPDATE_PROFILE_TRACKER,
+                pt,
+                oldSnap,
+                profileTrackerSnapshotBuilder,
+                profileTrackerAuditMeta,
+                getCurrentUserId()
+        );
+
+        updateProfileStatusAfterRemoval(pt.getProfile());
+
+        notificationService.notifyAllUsersExceptActor(
+                "PROFILE_TRACKER",
+                pt.getId(),
+                "Profile Removed From Demand",
+                "Profile "
+                        + pt.getProfile().getCandidateName()
+                        + " removed from Demand "
+                        + resolveDemandPrefix(pt.getDemand())
+                        + "-"
+                        + pt.getDemand().getDemandId(),
+                getCurrentUserId()
+        );
+
+        return "Profile removed from demand successfully";
+    }
+
+    private void updateProfileStatusAfterRemoval(Profile profile) {
+
+        long activeMappings =
+                trackerRepository.countActiveMappingsForProfile(
+                        profile.getId());
+
+        if (activeMappings > 0) {
+            return;
+        }
+
+        ProfileStatus availableStatus =
+                profileStatusRepository
+                        .findByNameIgnoreCase("Available")
+                        .orElseThrow(() ->
+                                new IllegalStateException(
+                                        "ProfileStatus 'Available' not found"));
+
+        Map<String, Object> oldProfileSnap =
+                profileSnapshotBuilder.snapshot(profile);
+
+        profile.setProfileStatus(availableStatus);
+        profile.setUpdatedByUserId(getCurrentUserId());
+
+        profileRepository.save(profile);
+
+        genericAuditService.recordUpdate(
+                AuditHistory.EntityType.PROFILE,
+                AuditHistory.Action.UPDATE_PROFILE,
+                profile,
+                oldProfileSnap,
+                profileSnapshotBuilder,
+                profileAuditMeta,
+                getCurrentUserId()
+        );
     }
 }

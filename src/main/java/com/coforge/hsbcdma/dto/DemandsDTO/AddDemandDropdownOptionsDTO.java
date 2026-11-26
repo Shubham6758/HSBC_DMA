@@ -30,4 +30,7 @@ public class AddDemandDropdownOptionsDTO {
     private List<OptionDTO> priorityList;
     private List<OptionDTO> onshoreLocationList;
     private List<OptionDTO> offshoreLocationList;
+    private List<OptionDTO> businessFunctionList;
+    private List<OptionDTO> jobCategoryList;
+    private List<OptionDTO> contractTypeList;
 }

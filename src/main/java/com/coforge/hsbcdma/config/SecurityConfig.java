@@ -1,5 +1,7 @@
 package com.coforge.hsbcdma.config;
 
+import com.coforge.hsbcdma.rbac.DynamicRbacAuthorizationFilter;
+import com.coforge.hsbcdma.service.Sso.OAuth2LoginSuccessHandler;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -120,9 +122,13 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtFilter;
+    private final DynamicRbacAuthorizationFilter dynamicRbacAuthorizationFilter;
+    private final OAuth2LoginSuccessHandler successHandler;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtFilter, DynamicRbacAuthorizationFilter dynamicRbacAuthorizationFilter, OAuth2LoginSuccessHandler successHandler) {
         this.jwtFilter = jwtFilter;
+        this.dynamicRbacAuthorizationFilter = dynamicRbacAuthorizationFilter;
+        this.successHandler = successHandler;
     }
 
     @Bean
@@ -142,7 +148,7 @@ public class SecurityConfig {
 
                 // ✅ JWT → Stateless
                 .sessionManagement(session ->
-                        session.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+                        session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 )
 
                 // ✅ Authorization rules
@@ -155,7 +161,9 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/auth_user/login",
                                 "/auth_user/forgot-password",
-                                "/auth_user/change-password"
+                                "/auth_user/change-password",
+                                "/api/auth/sso/login",
+                                "/api/auth/exchange"
                         ).permitAll()
 
                         .requestMatchers("/auth_user/**").permitAll()
@@ -179,6 +187,17 @@ public class SecurityConfig {
         // ✅ IMPORTANT: JWT filter AFTER CORS + OPTIONS handling
         http.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
 
+
+        http.addFilterAfter(
+                dynamicRbacAuthorizationFilter,
+                JwtAuthenticationFilter.class
+        );
+
+        http.oauth2Login(oauth ->
+                oauth.successHandler(
+                        successHandler
+                )
+        );
         return http.build();
     }
 

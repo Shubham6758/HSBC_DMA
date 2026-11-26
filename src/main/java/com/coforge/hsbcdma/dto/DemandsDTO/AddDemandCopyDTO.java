@@ -17,7 +17,7 @@ public class AddDemandCopyDTO {
     private LocalDate p1FlagDate;
 
     private Long demandId;
-    private Long rrNumber;
+    private String rrNumber;
     private LocalDate demandReceivedDate;
 
     private String experience;
@@ -42,6 +42,10 @@ public class AddDemandCopyDTO {
     private RefDTO deliveryManager;
     private RefDTO skillCluster;
     private RefDTO projectManager;
+    private RefDTO businessFunction;
+    private RefDTO jobCategory;
+    private RefDTO contractType;
+    private Long ctoolId;
 
     /* ---------- MANY TO MANY ---------- */
     private Set<RefDTO> primarySkills;

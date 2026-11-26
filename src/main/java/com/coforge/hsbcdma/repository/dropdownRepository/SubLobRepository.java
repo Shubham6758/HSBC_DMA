@@ -10,4 +10,6 @@ public interface SubLobRepository extends JpaRepository<SubLob,Long> {
     List<SubLob> findByLob_Id(Long lobId);
 //    import
     Optional<SubLob> findBySubLobIgnoreCase(String subLob);
+    boolean existsByLobId(Long lobId);
+
 }

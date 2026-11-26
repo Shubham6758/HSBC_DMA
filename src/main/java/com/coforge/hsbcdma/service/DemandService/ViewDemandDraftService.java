@@ -5,6 +5,7 @@ import com.coforge.hsbcdma.dto.DemandsDTO.RefDTO;
 import com.coforge.hsbcdma.entity.AddDemandDraft;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandsDraftRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -18,7 +19,7 @@ public class ViewDemandDraftService {
 
     public List<AddDemandDraftResponseDTO> getAllDemandDrafts() {
 
-        return addDemandDraftRepository.findAll()
+        return addDemandDraftRepository.findAll(Sort.by(Sort.Direction.DESC, "createdAt"))
                 .stream()
                 .map(this::mapToDTO)
                 .toList();
@@ -56,6 +57,12 @@ public class ViewDemandDraftService {
         dto.setLob(d.getLob() != null ?
                 new RefDTO(d.getLob().getId(), d.getLob().getLob()) : null);
 
+        dto.setSubLob(d.getSubLob() != null ?
+                new RefDTO(
+                        d.getSubLob().getId(),
+                        d.getSubLob().getSubLob()
+                ) : null);
+
         dto.setDemandType(d.getDemandType() != null ?
                 new RefDTO(d.getDemandType().getId(), d.getDemandType().getDemandType()) : null);
 
@@ -85,6 +92,12 @@ public class ViewDemandDraftService {
 
         dto.setDeliveryManager(d.getDeliveryManager() != null ?
                 new RefDTO(d.getDeliveryManager().getId(), d.getDeliveryManager().getDeliveryManager()) : null);
+
+        dto.setProjectManager(d.getProjectManager() != null ?
+                new RefDTO(
+                        d.getProjectManager().getId(),
+                        d.getProjectManager().getProjectManager()
+                ) : null);
 
         dto.setHbu(d.getHbu() != null ?
                 new RefDTO(d.getHbu().getId(), d.getHbu().getHbu()) : null);
@@ -120,6 +133,16 @@ public class ViewDemandDraftService {
                                 .collect(Collectors.toList())
         );
 
+        dto.setBusinessFunction(d.getBusinessFunction() != null ?
+                new RefDTO(d.getBusinessFunction().getId(), d.getBusinessFunction().getBusinessFunction()) : null);
+
+        dto.setJobCategory(d.getJobCategory() != null ?
+                new RefDTO(d.getJobCategory().getId(), d.getJobCategory().getJobCategory()) : null);
+
+        dto.setContractType(d.getContractType() != null ?
+                new RefDTO(d.getContractType().getId(), d.getContractType().getContractType()) : null);
+
+        dto.setCtoolId(d.getCtoolId());
 
         dto.setRrDrafts(
                 d.getRrDrafts() == null

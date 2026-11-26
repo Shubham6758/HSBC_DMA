@@ -132,11 +132,16 @@ SELECT
     COUNT(CASE
         WHEN s.status IN (
             'Open',
+            'Open Positions',
             'Profile Shared',
             'Profile Sent to Delivery',
+            'Profile Available - Ctool Awaited',
             'Profile Shared with IBU',
             'Profile Shared - No Response',
-            'Profile Shared with IBU - No Response'
+            'Profile Shared with IBU - No Response',
+            'Delayed demand - profile not available',
+            'Awaiting SOW',
+            'Awaiting CSG Clarification'
         )
         THEN 1 END) AS openCount,
 
@@ -157,9 +162,7 @@ SELECT
             'Demand Abandoned',
             'Abandoned by Client',
             'Lost to competition',
-            'On Hold',
-            'Awaiting SOW',
-            'Delayed demand - profile not available'
+            'On Hold'
         )
         OR s.status IS NULL   -- ✅ THIS IS THE FIX
         THEN 1 END) AS rejectedCount

@@ -18,7 +18,7 @@ public class AddDemandDraftResponseDTO {
     private Integer numberOfPositions;
     private Boolean karatFlag;
     private String experience;
-//    private String fileName;
+    //    private String fileName;
     private String remark;
     private LocalDate demandReceivedDate;
 
@@ -52,6 +52,12 @@ public class AddDemandDraftResponseDTO {
     private List<RefDTO> demandLocations;
 
     private List<AddDemandRRDraftDTO> rrDrafts;
+    private RefDTO subLob;
+    private RefDTO projectManager;
+    private RefDTO businessFunction;
+    private RefDTO jobCategory;
+    private RefDTO contractType;
+    private Long ctoolId;
 
     @Getter
     @Setter
@@ -59,7 +65,7 @@ public class AddDemandDraftResponseDTO {
     @NoArgsConstructor
     public static class AddDemandRRDraftDTO {
         private Long id;
-        private Long rrNumber;
+        private String rrNumber;
         private String fileName;
     }
 

@@ -56,7 +56,14 @@ public record OnboardingExportDTO(
                         ? pt.getProfile().getExternalInternal().getName() : "",
                 pt != null && pt.getDemand() != null && pt.getDemand().getHbu() != null
                         ? pt.getDemand().getHbu().getName() : "",
-                pt != null && pt.getDemand() != null ? pt.getDemand().getHiringManager().getName() : "",
+
+                // Hiring Manager
+                pt != null
+                        && pt.getDemand() != null
+                        && pt.getDemand().getHiringManager() != null
+                        ? pt.getDemand().getHiringManager().getName()
+                        : "",
+
 //                pt != null && pt.getDemand() != null ? pt.getDemand().getPmoSpoc() : "",
                 pt != null && pt.getDemand() != null && pt.getDemand().getPmo() != null
                         ? pt.getDemand().getPmo().getName() : "",

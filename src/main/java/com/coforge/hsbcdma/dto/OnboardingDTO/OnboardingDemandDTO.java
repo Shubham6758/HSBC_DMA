@@ -10,11 +10,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class OnboardingDemandDTO {
+    private Long demandPkId;
     private Long demandId;
     private String displayDemandId;
     private String lob;
     private String band;
-    private String pmoSpoc;
+    private String pmo;
     private String hiringManager;
     private String hbu;
 }

@@ -5,11 +5,15 @@ import com.coforge.hsbcdma.dto.DemandsDTO.GetAllDemandsResponse;
 import com.coforge.hsbcdma.dto.DemandsDTO.PageResponse;
 import com.coforge.hsbcdma.dto.DemandsDTO.RefDTO;
 import com.coforge.hsbcdma.entity.AddDemand;
+import com.coforge.hsbcdma.entity.ColumnPreference.UserFilterPreference;
 import com.coforge.hsbcdma.repository.AddNewDemandRepository;
+import com.coforge.hsbcdma.repository.ColumnRepository.UserFilterPreferenceRepository;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRepository;
 import com.coforge.hsbcdma.repository.DummyRepository;
 import com.coforge.hsbcdma.repository.LocationRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.*;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.slf4j.Logger;
@@ -20,11 +24,16 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.lang.reflect.Method;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -43,7 +52,6 @@ public class AddNewDemandService1 {
 
     @Autowired
     private AddDemandRepository addDemandRepository;
-
 
     @Autowired
     private SkillClusterRepository skillClusterRepository;
@@ -67,6 +75,11 @@ public class AddNewDemandService1 {
     @Value("${file.upload-dir}")
     private String uploadDir;
 
+    @Autowired
+    private UserFilterPreferenceRepository userFilterPreferenceRepository;
+
+    @Autowired
+    private ObjectMapper objectMapper;
 
 
     private static final Logger logger = LoggerFactory.getLogger(AddNewDemandService1.class);
@@ -393,7 +406,6 @@ public class AddNewDemandService1 {
 //    }
 
 
-
 //    public Page<GetAllDemandsResponse> getAllDemands1(int page, int size) {
 //
 //        Pageable pageable = PageRequest.of(page, size);
@@ -406,6 +418,7 @@ public class AddNewDemandService1 {
 
     public PageResponse getAllDemands1(int page, int size) {
 
+//        Pageable pageable = PageRequest.of(page, size);
         Pageable pageable = PageRequest.of(page, size);
 
         Page<AddDemand> demandsPage = addDemandRepository.findAllWithRefs(pageable);
@@ -432,7 +445,7 @@ public class AddNewDemandService1 {
 
     public PageResponse getAllDemands2(int page, int size,Long hbuId) {
 
-        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "createdAt"));
+        Pageable pageable = PageRequest.of(page, size);
 
         Page<AddDemand> demandsPage = addDemandRepository.findAllWithRefsByHbu(hbuId,pageable);
 
@@ -501,6 +514,7 @@ public class AddNewDemandService1 {
         return GetAllDemandsResponse.builder()
                 .id(d.getId())
                 .flag(d.getFlag())
+                .rrFlag(d.getRrFlag())
 
                 .demandId(d.getDemandId())
                 .displayDemandId(displayDemandId)
@@ -537,9 +551,28 @@ public class AddNewDemandService1 {
                 .projectManager(ref(d.getProjectManager()))
                 .karatFlag(d.getKaratFlag())
                 .isSubcon(d.getIsSubconRR())
+                .p1Age(calculateP1Age(d.getP1FlagDate()))
+                .businessFunction(ref(d.getBusinessFunction()))
+                .jobCategory(ref(d.getJobCategory()))
+                .contractType(ref(d.getContractType()))
+                .ctoolId(d.getCtoolId())
 //                .profileShared(trackerSummaries)
                 .build();
     }
+
+
+    private Long calculateP1Age(LocalDate p1FlagDate) {
+
+        if (p1FlagDate == null) {
+            return null;
+        }
+
+        return ChronoUnit.DAYS.between(
+                p1FlagDate,
+                LocalDate.now()
+        );
+    }
+
 
 //    @Transactional(readOnly = true)
 //    public Page<GetAllDemandsResponse> searchDemands(DemandsFilterRequest filter, int page, int size) {
@@ -568,8 +601,27 @@ public class AddNewDemandService1 {
 //        return toPageResponse(demandsPage);
 //    }
 
+//    @Transactional(readOnly = true)
+//    public PageResponse searchDemands(DemandsFilterRequest filter, int page, int size) {
+//
+////        Pageable pageable = PageRequest.of(page, size);
+//        Pageable pageable = PageRequest.of(page, size);
+//        Page<AddDemand> demandsPage = addDemandRepository.findAll(
+//                AddDemandSpecifications.byIds(filter)
+//                        .and(AddDemandSpecifications.byNames(filter)),
+//                pageable
+//        );
+//
+//        return toPageResponse(demandsPage);
+//    }
+
     @Transactional(readOnly = true)
-    public PageResponse searchDemands(DemandsFilterRequest filter, int page, int size) {
+    public PageResponse searchDemands(
+            DemandsFilterRequest filter,
+            int page,
+            int size) {
+
+        applyUserPreferences(filter);
 
         Pageable pageable = PageRequest.of(page, size);
 
@@ -581,7 +633,6 @@ public class AddNewDemandService1 {
 
         return toPageResponse(demandsPage);
     }
-
 
 
     private PageResponse toPageResponse(Page<AddDemand> demandsPage) {
@@ -601,7 +652,6 @@ public class AddNewDemandService1 {
                 demandsPage.getTotalPages()
         );
     }
-
 
 
     private RefDTO ref(Object entity) {
@@ -656,6 +706,172 @@ public class AddNewDemandService1 {
 
         if (id == null && name == null) return null;
         return new RefDTO(id, name);
+    }
+
+
+    public PageResponse getRrFlaggedDemands(int page, int size) {
+
+        Pageable pageable = PageRequest.of(
+                page,
+                size,
+                Sort.by(Sort.Direction.DESC, "updatedAt")  // extra safety
+        );
+
+        Page<AddDemand> demandsPage = addDemandRepository.findAllRrFlagged(pageable);
+
+        List<GetAllDemandsResponse> content = demandsPage.getContent()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
+
+        return new PageResponse(
+                content,
+                demandsPage.isEmpty(),
+                demandsPage.isFirst(),
+                demandsPage.isLast(),
+                demandsPage.getSize(),
+                demandsPage.getTotalElements(),
+                demandsPage.getTotalPages()
+        );
+    }
+
+    private void applyUserPreferences(
+            DemandsFilterRequest filter) {
+
+        try {
+
+            Long userId =
+                    Long.valueOf(
+                            SecurityContextHolder
+                                    .getContext()
+                                    .getAuthentication()
+                                    .getName());
+
+            List<UserFilterPreference> preferences =
+                    userFilterPreferenceRepository
+                            .findByUserId(userId);
+
+            Map<String, List<Long>> prefMap =
+                    new HashMap<>();
+
+            for (UserFilterPreference pref : preferences) {
+
+                List<Long> ids =
+                        objectMapper.readValue(
+                                pref.getFilterValue(),
+                                new TypeReference<List<Long>>() {});
+
+                prefMap.put(
+                        pref.getFilterName(),
+                        ids);
+            }
+
+            if (filter.getLobId() == null) {
+                filter.setPreferredLobIds(
+                        prefMap.get("LOB"));
+            }
+
+            if (filter.getSubLobId() == null) {
+                filter.setPreferredSubLobIds(
+                        prefMap.get("SUB_LOB"));
+            }
+
+            if (filter.getHbuId() == null) {
+                filter.setPreferredHbuIds(
+                        prefMap.get("HBU"));
+            }
+
+            if (filter.getBandId() == null) {
+                filter.setPreferredBandIds(
+                        prefMap.get("BAND"));
+            }
+
+            if (filter.getStatusId() == null) {
+                filter.setPreferredStatusIds(
+                        prefMap.get("STATUS"));
+            }
+
+            if (filter.getPriorityId() == null) {
+                filter.setPreferredPriorityIds(
+                        prefMap.get("PRIORITY"));
+            }
+
+            if (filter.getPodId() == null) {
+                filter.setPreferredPodIds(
+                        prefMap.get("POD"));
+            }
+
+            if (filter.getSkillClusterId() == null) {
+                filter.setPreferredSkillClusterIds(
+                        prefMap.get("SKILL_CLUSTER"));
+            }
+
+            if (filter.getDemandTypeId() == null) {
+                filter.setPreferredDemandTypeIds(
+                        prefMap.get("DEMAND_TYPE"));
+            }
+
+            if (filter.getBusinessFunctionId() == null) {
+                filter.setPreferredBusinessFunctionIds(
+                        prefMap.get("BUSINESS_FUNCTION"));
+            }
+
+            if (filter.getHbuSpocId() == null) {
+                filter.setPreferredHbuSpocIds(
+                        prefMap.get("HBU_SPOC"));
+            }
+
+            if (filter.getProjectManagerId() == null) {
+                filter.setPreferredProjectManagerIds(
+                        prefMap.get("PROJECT_MANAGER"));
+            }
+
+            if (filter.getPmoId() == null) {
+                filter.setPreferredPmoIds(
+                        prefMap.get("PMO"));
+            }
+
+            if (filter.getPmoSpocId() == null) {
+                filter.setPreferredPmoSpocIds(
+                        prefMap.get("PMO_SPOC"));
+            }
+
+            if (filter.getSalesSpocId() == null) {
+                filter.setPreferredSalesSpocIds(
+                        prefMap.get("SALES_SPOC"));
+            }
+
+            if (filter.getHiringManagerId() == null) {
+                filter.setPreferredHiringManagerIds(
+                        prefMap.get("HIRING_MANAGER"));
+            }
+
+            if (filter.getDeliveryManagerId() == null) {
+                filter.setPreferredDeliveryManagerIds(
+                        prefMap.get("DELIVERY_MANAGER"));
+            }
+
+            if (filter.getExternalInternalId() == null) {
+                filter.setPreferredExternalInternalIds(
+                        prefMap.get("EXTERNAL_INTERNAL"));
+            }
+
+            if (filter.getJobCategoryId() == null) {
+                filter.setPreferredJobCategoryIds(
+                        prefMap.get("JOB_CATEGORY"));
+            }
+
+            if (filter.getContractTypeId() == null) {
+                filter.setPreferredContractTypeIds(
+                        prefMap.get("CONTRACT_TYPE"));
+            }
+
+        } catch (Exception ex) {
+
+            logger.error(
+                    "Error while applying user preferences",
+                    ex);
+        }
     }
 
 }

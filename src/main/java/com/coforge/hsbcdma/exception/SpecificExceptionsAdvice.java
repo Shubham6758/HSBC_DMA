@@ -1,6 +1,7 @@
 package com.coforge.hsbcdma.exception;
 
 
+import com.coforge.hsbcdma.domain.model.ApiError;
 import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.stream.Collectors;
 
@@ -104,5 +106,21 @@ public class SpecificExceptionsAdvice {
     @ExceptionHandler(DMAGenericRuntimeException.class)
     public ResponseEntity<?> handleDMAGenericException(DMAGenericRuntimeException ex) {
         return ResponseEntity.badRequest().body(ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgumentException(
+            IllegalArgumentException ex) {
+
+        ApiError body = new ApiError(
+                "Bad Request",
+                ex.getMessage(),
+                HttpStatus.BAD_REQUEST.value(),
+                Instant.now()
+        );
+
+        return ResponseEntity
+                .status(HttpStatus.BAD_REQUEST)
+                .body(body);
     }
 }

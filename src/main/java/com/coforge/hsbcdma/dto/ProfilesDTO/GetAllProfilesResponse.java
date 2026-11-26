@@ -30,6 +30,7 @@ public class GetAllProfilesResponse {
 
     private String summary;
     private String fileName;
+    private String techIrsFileName;
 
     // New
     @jakarta.validation.constraints.Pattern(regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$", message = "Invalid PAN format")
@@ -52,7 +53,7 @@ public class GetAllProfilesResponse {
 
     private String officialNP;
 
-    private LocalDate negotiableNpLwd;
+    private String negotiableNpLwd;
 
     private String recruiter;private RefDTO origin;
     private RefDTO karatStatus;
@@ -74,5 +75,20 @@ public class GetAllProfilesResponse {
     private Double minBillingRate;
     private String projectCode;
 
+    private String actionStatus;
+
+    //karat
+    private RefDTO persona;
+    private String mentorBuddy;
+    private RefDTO prepStatus;
+    private LocalDate startDate;
+    private LocalDate plannedEndDate;
+    private RefDTO coderpadResult1;
+    private RefDTO coderpadResult2;
+    private RefDTO karatReadyStatus;
+    private LocalDate karatTestDate;
+    private RefDTO karatTestResult;
+    private Integer karatAgeing;
+    private Boolean isDraft;
 
 }

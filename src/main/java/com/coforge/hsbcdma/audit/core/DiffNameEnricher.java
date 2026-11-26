@@ -243,23 +243,53 @@ public class DiffNameEnricher {
     }
 
     private void collectIds(Map<String, Object> diff, String key, Set<Long> target) {
-        Object val = diff.get(key);
-        if (!(val instanceof Map<?, ?> m)) return;
+//        Object val = diff.get(key);
+//        if (!(val instanceof Map<?, ?> m)) return;
+//
+//        target.add(toLong(m.get("old")));
+//        target.add(toLong(m.get("new")));
+//        target.remove(null);
 
-        target.add(toLong(m.get("old")));
-        target.add(toLong(m.get("new")));
+        Object val = diff.get(key);
+
+        if (val instanceof Map<?, ?> m) {
+            // ✅ UPDATE case
+            target.add(toLong(m.get("old")));
+            target.add(toLong(m.get("new")));
+        } else {
+            // ✅ CREATE case
+            target.add(toLong(val));
+        }
+
         target.remove(null);
+
     }
 
 
     /** for list keys like primarySkillIds: {old:[1,2], new:[2,3]} */
     private void collectListIds(Map<String, Object> diff, String key, Set<Long> target) {
-        Object val = diff.get(key);
-        if (!(val instanceof Map<?, ?> m)) return;
+//        Object val = diff.get(key);
+//        if (!(val instanceof Map<?, ?> m)) return;
+//
+//        addAll(target, m.get("old"));
+//        addAll(target, m.get("new"));
+//        target.remove(null);
 
-        addAll(target, m.get("old"));
-        addAll(target, m.get("new"));
+        Object val = diff.get(key);
+
+        if (val instanceof Map<?, ?> m) {
+            // ✅ UPDATE
+            addAll(target, m.get("old"));
+            addAll(target, m.get("new"));
+        }
+
+        else if (val instanceof Collection<?> c) {
+            // ✅ CREATE
+            addAll(target, c);
+        }
+
         target.remove(null);
+
     }
 
     private void addAll(Set<Long> target, Object v) {
@@ -274,36 +304,95 @@ public class DiffNameEnricher {
 
 
     private void rewrite(Map<String, Object> out, String idKey, String outKey, Map<Long, String> names) {
+//        Object val = out.get(idKey);
+//        if (!(val instanceof Map<?, ?> m)) return;
+//
+//        Long oldId = toLong(m.get("old"));
+//        Long newId = toLong(m.get("new"));
+//
+//        Map<String, Object> enriched = new LinkedHashMap<>();
+//        enriched.put("old", oldId == null ? null : new RefDTO(oldId, names.get(oldId)));
+//        enriched.put("new", newId == null ? null : new RefDTO(newId, names.get(newId)));
+//
+//        // add new enriched key and keep/remove old id key as you prefer
+//        out.put(outKey, enriched);
+//        out.remove(idKey); // remove old id-only key (optional)
+
+
         Object val = out.get(idKey);
-        if (!(val instanceof Map<?, ?> m)) return;
 
-        Long oldId = toLong(m.get("old"));
-        Long newId = toLong(m.get("new"));
+        // ✅ UPDATE case (old/new)
+        if (val instanceof Map<?, ?> m) {
 
-        Map<String, Object> enriched = new LinkedHashMap<>();
-        enriched.put("old", oldId == null ? null : new RefDTO(oldId, names.get(oldId)));
-        enriched.put("new", newId == null ? null : new RefDTO(newId, names.get(newId)));
+            Long oldId = toLong(m.get("old"));
+            Long newId = toLong(m.get("new"));
 
-        // add new enriched key and keep/remove old id key as you prefer
-        out.put(outKey, enriched);
-        out.remove(idKey); // remove old id-only key (optional)
+            Map<String, Object> enriched = new LinkedHashMap<>();
+            enriched.put("old", oldId == null ? null : new RefDTO(oldId, names.get(oldId)));
+            enriched.put("new", newId == null ? null : new RefDTO(newId, names.get(newId)));
+
+            out.put(outKey, enriched);
+            out.remove(idKey);
+        }
+
+        // ✅ CREATE case (single value)
+        else if (val != null) {
+
+            Long id = toLong(val);
+
+            Map<String, Object> enriched = new LinkedHashMap<>();
+            enriched.put("new", id == null ? null : new RefDTO(id, names.get(id)));
+
+            out.put(outKey, enriched);
+            out.remove(idKey);
+        }
+
     }
 
 
     /** list ids -> list of RefDTO */
     private void rewriteList(Map<String, Object> out, String idsKey, String outKey, Map<Long, String> names) {
+//        Object val = out.get(idsKey);
+//        if (!(val instanceof Map<?, ?> m)) return;
+//
+//        List<RefDTO> oldRefs = toRefList(m.get("old"), names);
+//        List<RefDTO> newRefs = toRefList(m.get("new"), names);
+//
+//        Map<String, Object> enriched = new LinkedHashMap<>();
+//        enriched.put("old", oldRefs);
+//        enriched.put("new", newRefs);
+//
+//        out.put(outKey, enriched);
+//        out.remove(idsKey);
+
         Object val = out.get(idsKey);
-        if (!(val instanceof Map<?, ?> m)) return;
 
-        List<RefDTO> oldRefs = toRefList(m.get("old"), names);
-        List<RefDTO> newRefs = toRefList(m.get("new"), names);
+        // ✅ UPDATE case
+        if (val instanceof Map<?, ?> m) {
 
-        Map<String, Object> enriched = new LinkedHashMap<>();
-        enriched.put("old", oldRefs);
-        enriched.put("new", newRefs);
+            List<RefDTO> oldRefs = toRefList(m.get("old"), names);
+            List<RefDTO> newRefs = toRefList(m.get("new"), names);
 
-        out.put(outKey, enriched);
-        out.remove(idsKey);
+            Map<String, Object> enriched = new LinkedHashMap<>();
+            enriched.put("old", oldRefs);
+            enriched.put("new", newRefs);
+
+            out.put(outKey, enriched);
+            out.remove(idsKey);
+        }
+
+        // ✅ CREATE case (SIMPLE LIST ✅ IMPORTANT)
+        else if (val instanceof Collection<?> c) {
+
+            List<RefDTO> values = toRefList(c, names);
+
+            Map<String, Object> enriched = new LinkedHashMap<>();
+            enriched.put("new", values);
+
+            out.put(outKey, enriched);
+            out.remove(idsKey);
+        }
+
     }
 
 

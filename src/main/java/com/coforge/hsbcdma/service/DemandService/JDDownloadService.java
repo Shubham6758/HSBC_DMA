@@ -116,6 +116,42 @@ public class JDDownloadService {
         return streamFile(filePath, fileName);
     }
 
+    public ResponseEntity<Resource> downloadTechIrsByFileName(String fileName) {
+
+        validateFileName(fileName);
+
+        List<Profile> matches = profileRepo.findByTechIrsFileName(fileName);
+
+        if (matches.isEmpty()) {
+            throw new ResponseStatusException(NOT_FOUND, "Tech IRS file not found");
+        }
+
+        if (matches.size() > 1) {
+            throw new ResponseStatusException(CONFLICT,
+                    "Duplicate Tech IRS filenames found. Make filenames unique.");
+        }
+
+        Profile profile = matches.get(0);
+        Long profileId = profile.getId();
+
+        Path filePath = resolveTechIrsPath(profileId, fileName);
+
+        return streamFile(filePath, fileName);
+    }
+
+    private Path resolveTechIrsPath(Long profileId, String fileName) {
+
+        Path p = baseDir.resolve("profiles")
+                .resolve("profile-" + profileId)
+                .resolve("tech-irs")   // ✅ IMPORTANT (extra folder)
+                .resolve(fileName)
+                .normalize();
+
+        ensureInsideBaseDir(p);
+
+        return p;
+    }
+
 
     private Path resolveProfilePath(Long profileId, String fileName) {
         Path p = baseDir.resolve("profiles")

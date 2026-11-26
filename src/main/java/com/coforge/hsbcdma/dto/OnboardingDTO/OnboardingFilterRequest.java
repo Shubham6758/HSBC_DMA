@@ -19,7 +19,7 @@ public class OnboardingFilterRequest {
     private String band;                   // LIKE (band.band)
     private String hiringManager;          // LIKE (hiring_manager.<see note>)
     private String hbu;                    // LIKE (hbu.hbu)
-    private String pmoSpoc;                // LIKE (pmo_spoc.pmo_spoc)
+    private String pmo;                // LIKE (pmo.pmo)
 
     // -------- From ProfileTracker --------
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -77,4 +77,6 @@ public class OnboardingFilterRequest {
     private LocalDate hsbcOnboardingDateFrom;
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     private LocalDate hsbcOnboardingDateTo;
+
+    private String displayDemandId;
 }

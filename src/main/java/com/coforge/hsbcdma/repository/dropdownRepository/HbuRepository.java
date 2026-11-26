@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface HbuRepository extends JpaRepository<Hbu,Long> {
 //    import
     Optional<Hbu> findByHbuIgnoreCase(String hbu);
+
+    boolean existsByHbuIgnoreCase(String name);
 }

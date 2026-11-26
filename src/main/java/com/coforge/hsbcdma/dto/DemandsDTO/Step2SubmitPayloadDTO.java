@@ -2,6 +2,7 @@ package com.coforge.hsbcdma.dto.DemandsDTO;
 
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Data
@@ -55,5 +56,9 @@ public class Step2SubmitPayloadDTO {
     // Optional hint used when singleJdText is used:
     private String singleFilenameHint;
 
-
+    private LocalDate demandReceivedDate;
+    private Long businessFunctionId;
+    private Long jobCategoryId;
+    private Long contractTypeId;
+    private Long CtoolId;
 }

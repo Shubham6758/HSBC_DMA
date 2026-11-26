@@ -51,8 +51,132 @@ public final class AddDemandSpecifications {
             if (f.getDemandId() != null)
                 p.add(cb.equal(root.get("demandId"), f.getDemandId()));
 
-            if (f.getRrNumber() != null)
-                p.add(cb.equal(root.get("rrNumber"), f.getRrNumber()));
+            if (f.getCtoolId() != null) {
+                p.add(cb.equal(root.get("ctoolId"), f.getCtoolId()));
+            }
+//            if (hasText(f.getDisplayDemandId())) {
+//
+//                String value = f.getDisplayDemandId().trim();
+//
+//                if (value.contains("-")) {
+//
+//                    String[] arr = value.split("-", 2);
+//
+//                    String prefix = arr[0].trim().toLowerCase();
+//
+//                    try {
+//
+//                        Long demandNo = Long.valueOf(arr[1].trim());
+//
+//                        Predicate demandPredicate =
+//                                cb.equal(root.get("demandId"), demandNo);
+//
+//                        Predicate lobPredicate =
+//                                cb.like(
+//                                        cb.lower(
+//                                                root.join("lob", JoinType.LEFT)
+//                                                        .get("lob")
+//                                        ),
+//                                        "%" + prefix + "%"
+//                                );
+//
+//                        Predicate subLobPredicate =
+//                                cb.like(
+//                                        cb.lower(
+//                                                root.join("subLob", JoinType.LEFT)
+//                                                        .get("subLob")
+//                                        ),
+//                                        "%" + prefix + "%"
+//                                );
+//
+//                        p.add(
+//                                cb.and(
+//                                        demandPredicate,
+//                                        cb.or(lobPredicate, subLobPredicate)
+//                                )
+//                        );
+//
+//                    } catch (NumberFormatException ignored) {
+//                    }
+//
+//                } else {
+//
+//                    try {
+//
+//                        Long demandNo = Long.valueOf(value);
+//
+//                        p.add(
+//                                cb.equal(
+//                                        root.get("demandId"),
+//                                        demandNo
+//                                )
+//                        );
+//
+//                    } catch (NumberFormatException ex) {
+//
+//                        Predicate lobPredicate =
+//                                cb.like(
+//                                        cb.lower(
+//                                                root.join("lob", JoinType.LEFT)
+//                                                        .get("lob")
+//                                        ),
+//                                        "%" + value.toLowerCase() + "%"
+//                                );
+//
+//                        Predicate subLobPredicate =
+//                                cb.like(
+//                                        cb.lower(
+//                                                root.join("subLob", JoinType.LEFT)
+//                                                        .get("subLob")
+//                                        ),
+//                                        "%" + value.toLowerCase() + "%"
+//                                );
+//
+//                        p.add(
+//                                cb.or(lobPredicate, subLobPredicate)
+//                        );
+//                    }
+//                }
+//            }
+
+            if (hasText(f.getDisplayDemandId())) {
+
+                String like =
+                        "%" + f.getDisplayDemandId().trim().toLowerCase() + "%";
+
+                Expression<String> prefixExpr =
+                        cb.lower(
+                                cb.coalesce(
+                                        root.join("subLob", JoinType.LEFT).get("subLob"),
+                                        root.join("lob", JoinType.LEFT).get("lob")
+                                )
+                        );
+
+                Expression<String> displayDemandIdExpr =
+                        cb.concat(
+                                cb.concat(
+                                        prefixExpr,
+                                        "-"
+                                ),
+                                cb.toString(root.get("demandId"))
+                        );
+
+                p.add(
+                        cb.like(
+                                displayDemandIdExpr,
+                                like
+                        )
+                );
+            }
+
+            if (hasText(f.getRrNumber())) {
+                p.add(
+                        cb.like(
+                                cb.lower(root.get("rrNumber")),
+                                "%" + f.getRrNumber().trim().toLowerCase() + "%"
+                        )
+                );
+            }
 
             // ---- Date ranges ----
             if (f.getReceivedFrom() != null)
@@ -89,12 +213,32 @@ public final class AddDemandSpecifications {
             addEqId(p, cb, root, "deliveryManager", f.getDeliveryManagerId());
             addEqId(p, cb, root, "demandType", f.getDemandTypeId());
             addEqId(p, cb, root, "externalInternal", f.getExternalInternalId());
+            addEqId(p, cb, root, "businessFunction", f.getBusinessFunctionId());
+            addEqId(p, cb, root, "jobCategory", f.getJobCategoryId());
+            addEqId(p, cb, root, "contractType", f.getContractTypeId());
 
             // ---- ManyToMany ID filters (ANY) ----
             joinIds(p, root, REL_PRIMARY_SKILLS, f.getPrimarySkillIds());
             joinIds(p, root, REL_SECONDARY_SKILLS, f.getSecondarySkillIds());
             joinIds(p, root, REL_LOCATIONS, f.getLocationIds());
 
+            Path<String> statusPath = root.join("status", JoinType.LEFT).get("status");
+
+            Expression<Integer> statusOrder =
+                    cb.<Integer>selectCase()
+                            .when(cb.equal(cb.lower(statusPath), "open"), 1)
+                            .when(cb.equal(cb.lower(statusPath), "profile shared"), 2)
+                            .when(cb.equal(cb.lower(statusPath), "delayed demand - profile not available"), 3)
+                            .when(cb.equal(cb.lower(statusPath), "candidate shortlisted"), 4)
+                            .when(cb.equal(cb.lower(statusPath), "selected"), 5)
+                            .when(cb.equal(cb.lower(statusPath), "on hold"), 6)
+                            .otherwise(999);
+
+
+            query.orderBy(
+                    cb.asc(statusOrder),
+                    cb.desc(root.get("createdAt"))
+            );
             return cb.and(p.toArray(new Predicate[0]));
         };
     }
@@ -134,6 +278,32 @@ public final class AddDemandSpecifications {
                     "demandTimeline",
                     "demandTimeLine",
                     f.getDemandTimelineNames()
+            );
+            addLikeAny(
+                    p,
+                    cb,
+                    root,
+                    "businessFunction",
+                    "businessFunction",
+                    f.getBusinessFunctionNames()
+            );
+
+            addLikeAny(
+                    p,
+                    cb,
+                    root,
+                    "jobCategory",
+                    "jobCategory",
+                    f.getJobCategoryNames()
+            );
+
+            addLikeAny(
+                    p,
+                    cb,
+                    root,
+                    "contractType",
+                    "contractType",
+                    f.getContractTypeNames()
             );
 
             // ---- ManyToMany dropdowns ----

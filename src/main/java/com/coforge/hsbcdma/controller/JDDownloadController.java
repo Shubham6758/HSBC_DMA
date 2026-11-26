@@ -34,5 +34,10 @@ public class JDDownloadController {
     public ResponseEntity<Resource> downloadProfile(@PathVariable String fileName) {
         return service.downloadProfileByFileName(fileName);
     }
+
+    @GetMapping("/profile/techirs/download/{fileName}")
+    public ResponseEntity<Resource> downloadTechIrs(@PathVariable String fileName) {
+        return service.downloadTechIrsByFileName(fileName);
+    }
 }
 

@@ -40,6 +40,7 @@ public class DropdownService {
         response.setCountryCodes(countryCodeRepository.findAll());
         List<Roles> roles = rolesRepository.findByActiveTrue();
         List<DropdownResponse.RoleResponseDTO> roleDtos = roles.stream()
+                .filter(role -> !"SYSTEM".equalsIgnoreCase(role.getRole()))
                 .map(r -> new DropdownResponse.RoleResponseDTO(r.getId(), r.getRole()))
                 .toList();
 
@@ -58,7 +59,7 @@ public class DropdownService {
 
 
     public DropdowneditResponse geteditdropdown(){
-        List<Roles> roles = rolesRepository.findAll();
+        List<Roles> roles = rolesRepository.findAllExceptSystem();
         List<DropdownResponse.RoleResponseDTO> roleDtos = roles.stream()
                 .map(r -> new DropdownResponse.RoleResponseDTO(r.getId(), r.getRole()))
                 .toList();

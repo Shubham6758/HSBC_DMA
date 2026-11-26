@@ -1,6 +1,12 @@
 package com.coforge.hsbcdma.dto.DemandsDTO;
 
-
+import com.coforge.hsbcdma.validation.NoHtml;
+import com.coforge.hsbcdma.validation.ValidFileName;
+import com.coforge.hsbcdma.validation.ValidRrNumber;
+import com.coforge.hsbcdma.validation.ValidSummary;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -9,21 +15,28 @@ import java.util.List;
 @Data
 public class DemandDraftEditRequest {
 
-    // -------------------------
-    // Draft fields (same as create)
-    // -------------------------
     private Boolean flag;
+
     private Boolean karatFlag;
+
+    @Min(value = 1, message = "Number of positions must be greater than 0")
     private Integer numberOfPositions;
+
+    @NoHtml
+    @Size(max = 100, message = "Experience cannot exceed 100 characters")
     private String experience;
-    private String fileName;        // generally not used for draft header if you store JD per RR row
+
+    @ValidFileName
+    private String fileName;
+
+    @ValidSummary
     private String remark;
+
     private LocalDate demandReceivedDate;
 
     private String createdByUserId;
     private String createdByName;
 
-    // Dropdown references as IDs
     private Long hbuId;
     private Long hubSpocId;
     private Long bandId;
@@ -41,34 +54,43 @@ public class DemandDraftEditRequest {
     private Long deliveryManagerId;
     private Long skillClusterId;
 
-    // Many-to-many ids
     private List<Long> primarySkillIds;
     private List<Long> secondarySkillIds;
     private List<Long> locationIds;
 
-    // RR Draft rows (edit)
+    @Valid
     private List<RrDraftEditRequest> rrDrafts;
+    private Long businessFunctionId;
+    private Long jobCategoryId;
+    private Long contractTypeId;
+    private Long ctoolId;
 
+    private Long subLobId;
+    private Long projectManagerId;
     @Data
     public static class RrDraftEditRequest {
-        private Long rrDraftId;       // best if you store rr row id
-        private Integer positionIndex; // fallback: 1..N in UI order
 
-        private Long rrNumber;
+        private Long rrDraftId;
 
-        // keep your earlier field
-        private String fileName; // server overwrites with stored filename
+        @Min(value = 1, message = "Position index must be greater than 0")
+        private Integer positionIndex;
 
-        // file/text inputs
-        private Integer fileIndex;     // index from multipart files list
-        private String jdText;         // optional text
-        private String filenameHint;   // optional hint for text
+        @ValidRrNumber
+        private String rrNumber;
 
-        // allow clearing existing file mapping
+        @ValidFileName
+        private String fileName;
+
+        private Integer fileIndex;
+
+        private String jdText;
+
+        @NoHtml
+        @Size(max = 255, message = "Filename hint cannot exceed 255 characters")
+        private String filenameHint;
+
         private Boolean clearFile;
 
-
-        // NEW (partial update)
         private Boolean isSubconRR;
 
     }

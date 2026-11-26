@@ -3,6 +3,7 @@ package com.coforge.hsbcdma.controller;
 import com.coforge.hsbcdma.dto.DemandsDTO.*;
 import com.coforge.hsbcdma.service.DemandService.AddDemandDraftService;
 import com.coforge.hsbcdma.service.DemandService.ViewDemandDraftService;
+import jakarta.validation.Valid;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -41,7 +42,7 @@ public class DraftController {
             produces = MediaType.APPLICATION_JSON_VALUE
     )
     public ResponseEntity<?> create(
-            @RequestPart("req") AddDemandDraftCreateRequest request,
+            @Valid @RequestPart("req") AddDemandDraftCreateRequest request,
             @RequestPart(value = "files", required = false) List<MultipartFile> files
     ) {
         Long draftId = addDemandDraftService.createDraftWithRrDrafts(request, files);
@@ -59,7 +60,7 @@ public class DraftController {
     )
     public ResponseEntity<?> editDraft(
             @PathVariable Long draftId,
-            @RequestPart("req") DemandDraftEditRequest request,
+            @Valid @RequestPart("req") DemandDraftEditRequest request,
             @RequestPart(value = "files", required = false) List<MultipartFile> files
     ) {
         Long id = addDemandDraftService.editDraftWithRrDrafts(draftId, request, files);
@@ -72,7 +73,7 @@ public class DraftController {
 
 
     @PostMapping(value="/create1",produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<?> createDraft(@RequestBody AddDemandDraftOnlyCreateRequest req) {
+    public ResponseEntity<?> createDraft(@Valid @RequestBody AddDemandDraftOnlyCreateRequest req) {
         Long draftId = addDemandDraftService.createDraftOnly(req);
         return ResponseEntity.ok(Map.of(
                 "message", "Draft created successfully",
@@ -86,7 +87,7 @@ public class DraftController {
             produces = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<?> saveBulk(
             @PathVariable Long draftId,
-            @RequestPart("payload") AddDemandRrDraftBulkRequest payload,
+            @Valid @RequestPart("payload") AddDemandRrDraftBulkRequest payload,
             @RequestPart(value = "files", required = false) List<MultipartFile> files
     ) throws Exception {
         Long id = addDemandDraftService.saveRRDraftsForDraft(draftId, payload, files);

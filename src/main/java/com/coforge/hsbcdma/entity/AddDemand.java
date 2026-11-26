@@ -43,7 +43,10 @@ public class AddDemand extends BaseEntity {
     private Long demandId;
 
     @Column(name = "rr_number")
-    private Long rrNumber;
+    private String rrNumber;
+
+    @Column(name = "rr_flag")
+    private Boolean rrFlag;
 
     // scalar references (same pattern)
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "band_id")
@@ -102,7 +105,12 @@ public class AddDemand extends BaseEntity {
     private String remark;
 
 
-    @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "project_manager_id")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "business_function_id")
+    private BusinessFunction businessFunction;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_manager_id")
     private ProjectManager projectManager;
 
     @ManyToMany(fetch = FetchType.LAZY)
@@ -155,6 +163,17 @@ public class AddDemand extends BaseEntity {
 
     @Column(name = "demand_received_date", nullable = false)
     private LocalDate demandReceivedDate;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "job_category_id")
+    private JobCategory jobCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "contract_type_id")
+    private ContractType contractType;
+
+    @Column(name = "ctool_id", length = 50)
+    private Long ctoolId;
 
     @OneToMany(mappedBy = "demand", fetch = FetchType.LAZY, cascade = CascadeType.ALL, orphanRemoval = true)
     private java.util.Set<ProfileTracker> profileTrackers = new java.util.HashSet<>();

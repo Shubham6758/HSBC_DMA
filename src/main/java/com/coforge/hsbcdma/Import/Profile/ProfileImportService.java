@@ -83,11 +83,11 @@ public class ProfileImportService {
             issues.add("Candidate Name is required");
 
         // ✅ ✅ CORE RULE
-        if ((p.getEmpId() == null || p.getEmpId().isBlank()) &&
-                (p.getPanNumber() == null || p.getPanNumber().isBlank())) {
-
-            issues.add("Either EmpId or PAN Number is required");
-        }
+//        if ((p.getEmpId() == null || p.getEmpId().isBlank()) &&
+//                (p.getPanNumber() == null || p.getPanNumber().isBlank())) {
+//
+//            issues.add("Either EmpId or PAN Number is required");
+//        }
 
         if (p.getCountry() == null)
             issues.add("Country is required");

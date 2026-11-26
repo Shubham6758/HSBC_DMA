@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @Getter
@@ -12,7 +13,8 @@ import java.util.List;
 public class EditDemandPayloadDTO {
 
     // Editable primitives
-    private Long rrNumber;
+    private String rrNumber;
+//    private Boolean rrFlag;
     private String experience;
     private String remark;
 
@@ -56,4 +58,10 @@ public class EditDemandPayloadDTO {
 
     // Optional: explicitly clear JD file name from DB
     private Boolean clearJd;
+
+    private LocalDate demandReceivedDate;
+    private Long businessFunctionId;
+    private Long jobCategoryId;
+    private Long contractTypeId;
+    private Long ctoolId;
 }

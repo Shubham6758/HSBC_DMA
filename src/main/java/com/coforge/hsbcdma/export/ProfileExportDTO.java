@@ -13,9 +13,9 @@ public record ProfileExportDTO(
 
         Long id,
         String candidateName,
-        String emailId,
+//        String emailId,
         String empId,
-        Long phoneNumber,
+//        Long phoneNumber,
         Boolean isActive,
         Float experience,
 
@@ -54,11 +54,23 @@ public record ProfileExportDTO(
         LocalDate l1InterviewDate,
         String currentLocation,
         String officialNP,
-        LocalDate negotiableNpLwd,
+        String negotiableNpLwd,
         String recruiter,
 
         String primarySkills,
         String secondarySkills,
+//      karat fields
+        String persona,
+        String mentorBuddy,
+        String prepStatus,
+        LocalDate startDate,
+        LocalDate plannedEndDate,
+        String coderpadResult1,
+        String coderpadResult2,
+        String karatReadyStatus,
+        LocalDate karatTestDate,
+        String karatTestResult,
+        Integer karatAgeing,
 
         LocalDateTime createdAt,
         String createdByUserId,
@@ -70,23 +82,23 @@ public record ProfileExportDTO(
         return new ProfileExportDTO(
                 p.getId(),
                 p.getCandidateName(),
-                p.getEmailId(),
+//                p.getEmailId(),
                 p.getEmpId(),
-                p.getPhoneNumber(),
+//                p.getPhoneNumber(),
                 p.getIsActive(),
                 p.getExperience(),
 
                 // Masters
-                label(p.getSkillCluster()),
-                label(p.getLocation()),
-                label(p.getHbu()),
-                label(p.getExternalInternal()),
-                label(p.getCountry()),
-                label(p.getProfileStatus()),
-                label(p.getOrigin()),
-                label(p.getKaratStatus()),
-                label(p.getSource()),
-                label(p.getOverallStatusRdg()),
+                p.getSkillCluster() != null ? label(p.getSkillCluster()) : "",
+                p.getLocation() != null ? label(p.getLocation()) : "",
+                p.getHbu() != null ? label(p.getHbu()) : "",
+                p.getExternalInternal() != null ? label(p.getExternalInternal()) : "",
+                p.getCountry() != null ? label(p.getCountry()) : "",
+                p.getProfileStatus() != null ? label(p.getProfileStatus()) : "",
+                p.getOrigin() != null ? label(p.getOrigin()) : "",
+                p.getKaratStatus() != null ? label(p.getKaratStatus()) : "",
+                p.getSource() != null ? label(p.getSource()) : "",
+                p.getOverallStatusRdg() != null ? label(p.getOverallStatusRdg()) : "",
 
                 // Normal fields
                 p.getSummary(),
@@ -120,6 +132,18 @@ public record ProfileExportDTO(
                 joinLabels(p.getPrimarySkills()),
                 joinLabels(p.getSecondarySkills()),
 
+                p.getPersona() != null ? label(p.getPersona()) : "",
+                p.getMentorBuddy(),
+                p.getPrepStatus() != null ? label(p.getPrepStatus()) : "",
+                p.getStartDate(),
+                p.getPlannedEndDate(),
+                p.getCoderpadResult1() != null ? label(p.getCoderpadResult1()) : "",
+                p.getCoderpadResult2() != null ? label(p.getCoderpadResult2()) : "",
+                p.getKaratReadyStatus() != null ? label(p.getKaratReadyStatus()) : "",
+                p.getKaratTestDate(),
+
+                p.getKaratTestResult() != null ? label(p.getKaratTestResult()) : "",
+                p.getKaratAgeing(),
                 // Audit
                 p.getCreatedAt(),
                 createdByUsername,   // ✅ resolved name (important)

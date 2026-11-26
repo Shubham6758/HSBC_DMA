@@ -3,6 +3,7 @@ package com.coforge.hsbcdma.repository;
 import com.coforge.hsbcdma.entity.Roles;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -16,6 +17,9 @@ public interface RolesRepository extends JpaRepository<Roles, Long>{
    List<Roles> findByActiveTrue();
    @EntityGraph(attributePaths = {"createdBy"})
    List<Roles> findAll();
+
+   @Query("SELECT r FROM Roles r WHERE UPPER(r.role) <> 'SYSTEM'")
+   List<Roles> findAllExceptSystem();
 
 
 }

@@ -41,7 +41,7 @@ public class GetAllOnboardingDTO {
     private String bandName;
     private String hiringManagerName;
     private String hbuName;
-    private String pmoSpocName;
+    private String pmoName;
 
     // Profile Tracker
     private LocalDate profileSharedDate;

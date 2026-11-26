@@ -49,6 +49,12 @@ public class RoleService {
     @Transactional
     public RoleCreateResponse createRole(RoleCreateRequest request) {
 
+
+        validateRoleRequest(request);
+
+        String roleName = request.getRole().trim();
+
+
         if (roleRepository.existsByRoleIgnoreCase(request.getRole())) {
             throw new RuntimeException("Role already exists: " + request.getRole());
         }
@@ -61,7 +67,7 @@ public class RoleService {
         Optional<User> user = Optional.ofNullable(userAccountRepository.findByUserId(username).orElseThrow(() -> new RuntimeException("User Not Found")));
 
         Roles role = new Roles();
-        role.setRole(request.getRole().trim());
+        role.setRole(roleName);
 //        role.setCreatedBy(username+"-"+user.get().getName());
         role.setCreatedAt(LocalDateTime.now());
         role.setCreatedBy(user.get());
@@ -201,14 +207,15 @@ public class RoleService {
         logger.info("*****username*****{}",username);
         Optional<User> user = Optional.ofNullable(userAccountRepository.findByUserId(username).orElseThrow(() -> new RuntimeException("User Not Found")));
 
-        String newRoleName = request.getRole();
+        validateRoleRequest(request);
+        String newRoleName = request.getRole().trim();
         if (newRoleName == null || newRoleName.trim().isEmpty()) {
             throw new IllegalArgumentException("Role name cannot be null/empty");
         }
 
         logger.info("Updating roleId={} by user={}, requestRole={}", roleId, username, newRoleName);
 
-        role.setRole(newRoleName.trim());
+        role.setRole(newRoleName);
         role.setUpdateAt(LocalDateTime.now());
 //        role.setUpdatedBy(username+"-"+user.get().getName());
 
@@ -371,6 +378,74 @@ public class RoleService {
                 .createdAt(r.getCreatedAt())
                 .moduleChildModule(r.getModuleChildModule())
                 .build();
+    }
+
+
+    // ------------------------------------------------------
+// Input validation for Role Management
+// ------------------------------------------------------
+
+    private void validateRoleRequest(RoleCreateRequest request) {
+
+        if (request == null) {
+            throw new IllegalArgumentException("Role request is required");
+        }
+
+        validateRoleName(request.getRole());
+    }
+
+    private void validateRoleName(String roleName) {
+
+        if (roleName == null || roleName.trim().isEmpty()) {
+            throw new IllegalArgumentException("Role name is required");
+        }
+
+        String value = roleName.trim();
+
+        if (containsUnsafeInput(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in Role Name");
+        }
+
+        if (value.length() > 100) {
+            throw new IllegalArgumentException("Role name cannot be more than 100 characters");
+        }
+
+        /*
+         * Allowed role names:
+         * DM
+         * PMO
+         * Admin
+         * Role Manager
+         * HBU-EXPERIENCE
+         * L1 Support
+         */
+        if (!value.matches("^[a-zA-Z0-9 ._-]+$")) {
+            throw new IllegalArgumentException(
+                    "Invalid Role Name. Only letters, numbers, spaces, dot, underscore and hyphen are allowed"
+            );
+        }
+    }
+
+    private boolean containsUnsafeInput(String value) {
+
+        if (value == null) {
+            return false;
+        }
+
+        String lower = value.toLowerCase(Locale.ROOT);
+
+        return lower.contains("<")
+                || lower.contains(">")
+                || lower.contains("&lt;")
+                || lower.contains("&gt;")
+                || lower.contains("script")
+                || lower.contains("svg")
+                || lower.contains("javascript:")
+                || lower.contains("onerror")
+                || lower.contains("onload")
+                || lower.contains("onclick")
+                || lower.contains("onmouseover")
+                || lower.contains("alert(");
     }
 
 }

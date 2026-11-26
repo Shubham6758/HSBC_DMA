@@ -1,5 +1,6 @@
 package com.coforge.hsbcdma.Import.ProfileTracker;
 
+import com.coforge.hsbcdma.Import.ExcelColumnHelper;
 import com.coforge.hsbcdma.Import.ExcelDateHelper;
 import com.coforge.hsbcdma.entity.AddDemand;
 import com.coforge.hsbcdma.entity.Profile;
@@ -22,7 +23,9 @@ import org.springframework.stereotype.Component;
 import java.io.InputStream;
 import java.time.LocalDate;
 import java.util.*;
-import java.util.function.*;
+import java.util.function.BiConsumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
 
 @Slf4j
 @Component
@@ -148,26 +151,93 @@ public class ProfileTrackerExcelImportHelper {
     }
 
     /* ---------------- Profile ---------------- */
-    private Profile lookupProfile(String empId, String pan, int row) {
+//    private Profile lookupProfile(String empId, String pan, int row) {
+//
+//        if (empId != null && !empId.trim().isEmpty()) {
+//            return profileCache.computeIfAbsent("EMP_" + empId,
+//                    k -> profileRepo.findByEmpId(empId)
+//                            .orElseThrow(() ->
+//                                    new IllegalArgumentException("Row " + row +
+//                                            ": EmpId not found " + empId)));
+//        }
+//
+//        if (pan != null && !pan.trim().isEmpty()) {
+//            return profileCache.computeIfAbsent("PAN_" + pan,
+//                    k -> profileRepo.findByPanNumberIgnoreCase(pan)
+//                            .orElseThrow(() ->
+//                                    new IllegalArgumentException("Row " + row +
+//                                            ": PAN not found " + pan)));
+//        }
+//
+//
+//        throw new IllegalArgumentException(
+//                "Row " + row + ": Either EmpId or PAN must be provided");
+//    }
 
+
+    /* ---------------- Profile ---------------- */
+    private Profile lookupProfile(
+            String empId,
+            String pan,
+            String emailId,
+            Long phoneNumber,
+            int row) {
+
+        // 1. EMP ID
         if (empId != null && !empId.trim().isEmpty()) {
-            return profileCache.computeIfAbsent("EMP_" + empId,
+
+            return profileCache.computeIfAbsent(
+                    "EMP_" + empId,
                     k -> profileRepo.findByEmpId(empId)
                             .orElseThrow(() ->
-                                    new IllegalArgumentException("Row " + row +
-                                            ": EmpId not found " + empId)));
+                                    new IllegalArgumentException(
+                                            "Row " + row +
+                                                    ": EmpId not found " + empId))
+            );
         }
 
+        // 2. PAN
         if (pan != null && !pan.trim().isEmpty()) {
-            return profileCache.computeIfAbsent("PAN_" + pan,
+
+            return profileCache.computeIfAbsent(
+                    "PAN_" + pan.toUpperCase(),
                     k -> profileRepo.findByPanNumberIgnoreCase(pan)
                             .orElseThrow(() ->
-                                    new IllegalArgumentException("Row " + row +
-                                            ": PAN not found " + pan)));
+                                    new IllegalArgumentException(
+                                            "Row " + row +
+                                                    ": PAN not found " + pan))
+            );
+        }
+
+        // 3. EMAIL
+        if (emailId != null && !emailId.trim().isEmpty()) {
+
+            return profileCache.computeIfAbsent(
+                    "EMAIL_" + emailId.toLowerCase(),
+                    k -> profileRepo.findByEmailIdIgnoreCase(emailId)
+                            .orElseThrow(() ->
+                                    new IllegalArgumentException(
+                                            "Row " + row +
+                                                    ": EmailId not found " + emailId))
+            );
+        }
+
+        // 4. PHONE NUMBER
+        if (phoneNumber != null) {
+
+            return profileCache.computeIfAbsent(
+                    "PHONE_" + phoneNumber,
+                    k -> profileRepo.findByPhoneNumber(phoneNumber)
+                            .orElseThrow(() ->
+                                    new IllegalArgumentException(
+                                            "Row " + row +
+                                                    ": Phone Number not found " + phoneNumber))
+            );
         }
 
         throw new IllegalArgumentException(
-                "Row " + row + ": Either EmpId or PAN must be provided");
+                "Row " + row +
+                        ": Either EmpId, PAN, EmailId or Phone Number must be provided");
     }
 
     /* ---------------- MAIN ---------------- */
@@ -185,28 +255,119 @@ public class ProfileTrackerExcelImportHelper {
         try (Workbook wb = new XSSFWorkbook(in)) {
             Sheet s = wb.getSheetAt(0);
 
+            Map<String, Integer> headerMap =
+                    ExcelColumnHelper.getHeaderIndexMap(s);
+
             for (Row r : s) {
 
                 if (r.getRowNum() == 0 || isRowEmpty(r)) continue;
 
                 int row = r.getRowNum();
 
-                Long demandId = getLong(r.getCell(0));
-                String lobName = getString(r.getCell(1));
-                String subLobName = getString(r.getCell(2));
+                Long demandId = getLong(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "demand id"
+                        )
+                );
 
-                String empId = getString(r.getCell(3));
-                String pan = getString(r.getCell(4));
+                String lobName = getString(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "lob"
+                        )
+                );
 
-                LocalDate shared = getDateValue(r.getCell(5));
-                LocalDate iv = getDateValue(r.getCell(6));
-                LocalDate attach = getDateValue(r.getCell(7));
-                LocalDate decide = getDateValue(r.getCell(8));
-                String statusNm = getString(r.getCell(9));
+                String subLobName = getString(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "sub lob"
+                        )
+                );
+
+                String empId = getString(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "emp id"
+                        )
+                );
+
+                String pan = getString(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "pan number"
+                        )
+                );
+
+                String emailId = getString(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "email id"
+                        )
+                );
+
+                Long phoneNumber = getLong(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "phone number"
+                        )
+                );
+
+                LocalDate shared = getDateValue(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "profile shared date"
+                        )
+                );
+
+                LocalDate iv = getDateValue(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "interview date"
+                        )
+                );
+
+                LocalDate attach = getDateValue(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "attached date"
+                        )
+                );
+
+                LocalDate decide = getDateValue(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "decision date"
+                        )
+                );
+
+                String statusNm = getString(
+                        ExcelColumnHelper.getCell(
+                                r,
+                                headerMap,
+                                "profile tracker status"
+                        )
+                );
 
                 AddDemand demand = lookupDemand(demandId, lobName, subLobName, row);
-                Profile profile = lookupProfile(empId, pan, row);
-
+                Profile profile = lookupProfile(
+                        empId,
+                        pan,
+                        emailId,
+                        phoneNumber,
+                        row
+                );
                 ProfileTrackerStatus status =
                         resolveOrCreate(
                                 statusNm,

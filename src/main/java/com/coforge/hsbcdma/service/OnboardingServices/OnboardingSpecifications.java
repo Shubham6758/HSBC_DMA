@@ -8,12 +8,14 @@ import com.coforge.hsbcdma.entity.Onboarding;
 import com.coforge.hsbcdma.entity.Profile;
 import com.coforge.hsbcdma.entity.ProfileTracker;
 import jakarta.persistence.criteria.*;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 public final class OnboardingSpecifications {
 
     private OnboardingSpecifications() {}
@@ -27,14 +29,18 @@ public final class OnboardingSpecifications {
     private static final String ATTR_BAND                  = "band";               // Band.band
     private static final String ATTR_HBU                   = "hbu";                // Hbu.hbu
     private static final String ATTR_HIRING_MANAGER        = "hiringManager";      // HiringManager.hiringManager
-    private static final String ATTR_PMO_SPOC              = "pmoSpoc";            // PmoSpoc.pmoSpoc
+    private static final String ATTR_PMO                   = "pmo";            // Pmo.pmo
 
     // Onboarding-side masters
-    private static final String ATTR_ONBOARDING_STATUS     = "onboardingStatus";   // OnboardingStatus.onboardingStatus
-    private static final String ATTR_BGV_STATUS            = "bgvStatus";          // BgvStatus.bgvStatus
-    private static final String ATTR_WBS_TYPE              = "wbsType";            // WbsType.wbsType
+    private static final String ATTR_ONBOARDING_STATUS     = "name";   // OnboardingStatus.onboardingStatus
+    private static final String ATTR_BGV_STATUS            = "name";          // BgvStatus.bgvStatus
+    private static final String ATTR_WBS_TYPE              = "name";            // WbsType.wbsType
 
     public static Specification<Onboarding> byFilter(OnboardingFilterRequest f) {
+        System.out.println("LOB = " + f.getLob());
+        System.out.println("PMO = " + f.getPmo());
+        System.out.println("HBU = " + f.getHbu());
+
         return (root, query, cb) -> {
 
             if (query.getResultType() != Long.class) {
@@ -51,11 +57,12 @@ public final class OnboardingSpecifications {
 
             boolean needsDemand =
                     f.getDemandId() != null ||
+                            hasText(f.getDisplayDemandId()) ||
                             hasText(f.getLob()) ||
                             hasText(f.getBand()) ||
                             hasText(f.getHiringManager()) ||
                             hasText(f.getHbu()) ||
-                            hasText(f.getPmoSpoc());
+                            hasText(f.getPmo());
 
             boolean needsTracker =
                     f.getProfileSharedDate() != null ||
@@ -117,12 +124,14 @@ public final class OnboardingSpecifications {
                                 .get(ATTR_HBU)),
                         like(f.getHbu())));
             }
-            if (hasText(f.getPmoSpoc())) {
+            if (hasText(f.getPmo())) {
+                log.info("Applying PMO Filter = {}", f.getPmo());
+
                 predicates.add(cb.like(
                         cb.lower((d != null ? d : root.join("demand"))
-                                .join("pmoSpoc", JoinType.LEFT)
-                                .get(ATTR_PMO_SPOC)),
-                        like(f.getPmoSpoc())));
+                                .join("pmo", JoinType.LEFT)
+                                .get(ATTR_PMO)),
+                        like(f.getPmo())));
             }
 
             // ----- Onboarding masters -----
@@ -169,6 +178,106 @@ public final class OnboardingSpecifications {
                 addDateEqOrRange(cb, predicates, path,
                         f.getProfileSharedDate(), f.getProfileSharedDateFrom(), f.getProfileSharedDateTo());
             }
+
+//            if (hasText(f.getDisplayDemandId())) {
+//
+//                String value = f.getDisplayDemandId().trim();
+//
+//                if (value.contains("-")) {
+//
+//                    String[] arr = value.split("-", 2);
+//
+//                    String prefix = arr[0];
+//                    Long demandNo = Long.valueOf(arr[1]);
+//
+//                    predicates.add(
+//                            cb.equal(
+//                                    (d != null ? d : root.join("demand"))
+//                                            .get("demandId"),
+//                                    demandNo
+//                            )
+//                    );
+//
+//                    Predicate lob = cb.like(
+//                            cb.lower(
+//                                    (d != null ? d : root.join("demand"))
+//                                            .join("lob", JoinType.LEFT)
+//                                            .get("lob")
+//                            ),
+//                            "%" + prefix.toLowerCase() + "%"
+//                    );
+//
+//                    Predicate subLob = cb.like(
+//                            cb.lower(
+//                                    (d != null ? d : root.join("demand"))
+//                                            .join("subLob", JoinType.LEFT)
+//                                            .get("subLob")
+//                            ),
+//                            "%" + prefix.toLowerCase() + "%"
+//                    );
+//
+//                    predicates.add(cb.or(lob, subLob));
+//
+//                } else {
+//
+//                    Predicate lob = cb.like(
+//                            cb.lower(
+//                                    (d != null ? d : root.join("demand"))
+//                                            .join("lob", JoinType.LEFT)
+//                                            .get("lob")
+//                            ),
+//                            "%" + value.toLowerCase() + "%"
+//                    );
+//
+//                    Predicate subLob = cb.like(
+//                            cb.lower(
+//                                    (d != null ? d : root.join("demand"))
+//                                            .join("subLob", JoinType.LEFT)
+//                                            .get("subLob")
+//                            ),
+//                            "%" + value.toLowerCase() + "%"
+//                    );
+//
+//                    predicates.add(cb.or(lob, subLob));
+//                }
+//            }
+
+            if (hasText(f.getDisplayDemandId())) {
+
+                Join<Onboarding, AddDemand> demandJoin =
+                        d != null ? d : root.join("demand", JoinType.INNER);
+
+                String like =
+                        "%" + f.getDisplayDemandId().trim().toLowerCase() + "%";
+
+                Expression<String> prefixExpr =
+                        cb.lower(
+                                cb.coalesce(
+                                        demandJoin.join("subLob", JoinType.LEFT)
+                                                .get("subLob"),
+                                        demandJoin.join("lob", JoinType.LEFT)
+                                                .get("lob")
+                                )
+                        );
+
+                Expression<String> displayDemandIdExpr =
+                        cb.concat(
+                                cb.concat(
+                                        prefixExpr,
+                                        "-"
+                                ),
+                                cb.toString(demandJoin.get("demandId"))
+                        );
+
+                predicates.add(
+                        cb.like(
+                                displayDemandIdExpr,
+                                like
+                        )
+                );
+            }
+
+
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };

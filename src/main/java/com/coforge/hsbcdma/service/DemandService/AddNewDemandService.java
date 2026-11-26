@@ -1,4 +1,5 @@
 package com.coforge.hsbcdma.service.DemandService;
+
 import com.coforge.hsbcdma.audit.AddDemandAuditService;
 import com.coforge.hsbcdma.audit.AddDemandSnapshot1Builder;
 import com.coforge.hsbcdma.audit.AuditHistory;
@@ -9,14 +10,23 @@ import com.coforge.hsbcdma.entity.AddDemand;
 import com.coforge.hsbcdma.entity.Location;
 import com.coforge.hsbcdma.entity.User;
 import com.coforge.hsbcdma.entity.dropdownEntities.*;
+import com.coforge.hsbcdma.entity.dropdownEntities.Onboarding.OnboardingStatus;
+import com.coforge.hsbcdma.entity.dropdownEntities.Profile.ProfileTrackerStatus;
+import com.coforge.hsbcdma.exception.ResourceNotFoundException;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRRDraftRepository;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRepository;
 import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandsDraftRepository;
+import com.coforge.hsbcdma.repository.OnboardingRepositories.OnboardingRepository;
+import com.coforge.hsbcdma.repository.OnboardingRepositories.OnboardingStatusRepository;
+import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackRepository;
+import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackerStatusRepository;
 import com.coforge.hsbcdma.repository.UserAccountRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.StatusRepository;
+import com.coforge.hsbcdma.service.NotificationServices.NotificationService;
 import jakarta.annotation.PostConstruct;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import org.apache.coyote.BadRequestException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,6 +67,11 @@ public class AddNewDemandService {
     private final GenericAuditService genericAuditService;
 
     private final StatusRepository statusRepository;
+    private final NotificationService notificationService;
+    private final ProfileTrackerStatusRepository profileTrackerStatusRepository;
+    private final ProfileTrackRepository profileTrackRepository;
+    private final OnboardingStatusRepository onboardingStatusRepository;
+    private final OnboardingRepository onboardingRepository;
 
     @Value("${app.jd.storage-path}")
     private String storagePath;
@@ -113,16 +128,25 @@ public class AddNewDemandService {
             throw new IllegalArgumentException("rrs size must match numberOfPositions");
 
         // Validate rrNumbers present + unique in request
-        Set<Long> seen = new HashSet<>();
+        // Validate RR number, JD text, file name and uniqueness in request
+        Set<String> seen = new HashSet<>();
+
         for (RrJdRequestDTO rr : payload.getRrs()) {
-            if (rr.getRrNumber() == null)
-                throw new IllegalArgumentException("rrNumber is required for each position");
-            if (!seen.add(rr.getRrNumber()))
-                throw new IllegalArgumentException("Duplicate rrNumber in payload: " + rr.getRrNumber());
+
+            validateRrAndJd(rr);
+
+            String cleanRrNumber = rr.getRrNumber().trim();
+
+            if (!seen.add(cleanRrNumber)) {
+                throw new IllegalArgumentException("Duplicate rrNumber in payload: " + cleanRrNumber);
+            }
+
+            // Store trimmed RR number back into DTO
+            rr.setRrNumber(cleanRrNumber);
         }
 
         // Validate rrNumbers not already in DB (rr_number is UNIQUE)
-        List<Long> existing = finalRepo.findExistingRrNumbers(seen);
+        List<String> existing = finalRepo.findExistingRrNumbers(seen);
         if (!existing.isEmpty())
             throw new IllegalArgumentException("rrNumber already exists in DB: " + existing);
 
@@ -134,6 +158,8 @@ public class AddNewDemandService {
         // NEW: Resolve single JD (either text or a single file)
         // -------------------------------------------------------
         final boolean useSingle = Boolean.TRUE.equals(payload.getUseSingleJdForAll());
+
+        validateSingleJdFields(payload);
 
         // Pre-index uploaded files by original filename for quick lookup
         Map<String, MultipartFile> filesByName = new HashMap<>();
@@ -184,6 +210,7 @@ public class AddNewDemandService {
 
             // do NOT set demandId
             fin.setRrNumber(rr.getRrNumber());
+            fin.setRrFlag(rr.getRrFlag()); // nullable, no validation needed
 
             // copy common fields
             applyCommonFields(payload, fin);
@@ -228,6 +255,8 @@ public class AddNewDemandService {
                 }
                 // else: nothing to set (but by construction, when useSingle=true we will have one of the two)
             }
+
+            validateRrAndJd(rr);
             // -------------------------------------------------------
 
 
@@ -237,7 +266,29 @@ public class AddNewDemandService {
 
             finalRepo.save(fin);
 //            for history
-            auditService.recordCreate(fin);
+//            auditService.recordCreate(fin);
+
+//            try {
+//                notificationService.notifyUsers(
+//                        "DEMAND",
+//                        fin.getId(),  // reference_id
+//                        "New Demand Created",
+//                        "Demand " + prefix + "-" + fin.getDemandId()
+//                                + " has been created",
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                log.error("🔥 Notification FAILURE", e);
+//                throw e; // TEMP: so you can see error
+//            }
+            genericAuditService.recordCreate(
+                    AuditHistory.EntityType.ADD_DEMAND,
+                    fin,
+                    addDemandSnapshotBuilder,
+                    addDemandAuditMeta,
+                    getCurrentUserId()  // or logged-in user
+            );
+
 
             // response only displayDemandId
             displayIds.add(prefix + "-" + realDemandId);
@@ -249,7 +300,51 @@ public class AddNewDemandService {
         return out;
 
     }
+    /**
+     * when priority changes from p1 to p2 or p0 to p2 then
+     * demand -> demand abandoned
+     * PT -> demand Abandoned
+     * */
+    private void handlePriorityDowngradeToP2(AddDemand demand, String oldPriorityCode) {
 
+        if (oldPriorityCode == null || demand.getPriority() == null) return;
+
+        String newPriorityCode = demand.getPriority().getName();
+
+        boolean moveToP2 =
+                ("P0".equalsIgnoreCase(oldPriorityCode) || "P1".equalsIgnoreCase(oldPriorityCode)) &&
+                        "P2".equalsIgnoreCase(newPriorityCode);
+
+        if (!moveToP2) return;
+
+        // ✅ 1. Update Demand Status → Demand Abandoned
+        Status abandonedStatus = statusRepository.findByStatusIgnoreCase("Demand Abandoned")
+                .orElseThrow(() -> new IllegalStateException("Demand Abandoned status not found"));
+
+        demand.setStatus(abandonedStatus);
+
+        // ✅ 2. Update ALL ProfileTracker Status → Demand Abandoned
+        ProfileTrackerStatus ptAbandonedStatus =
+                profileTrackerStatusRepository.findByNameIgnoreCase("Demand Abandoned")
+                        .orElseThrow(() -> new IllegalStateException("ProfileTracker Demand Abandoned status not found"));
+
+        profileTrackRepository.updateStatusByDemandId(
+                demand.getId(),
+                ptAbandonedStatus
+        );
+
+
+        // ✅ 3. Update ALL Onboarding Status → Demand Abandoned
+        OnboardingStatus onboardingAbandonedStatus =
+                onboardingStatusRepository.findByNameIgnoreCase("Demand Abandoned")
+                        .orElseThrow(() -> new IllegalStateException("Onboarding Demand Abandoned status not found"));
+
+        onboardingRepository.updateStatusByDemandId(
+                demand.getId(),
+                onboardingAbandonedStatus
+        );
+
+    }
     /**
      * when priority p2 then p1 flag date null otherwise current date
      * */
@@ -264,9 +359,9 @@ public class AddNewDemandService {
     }
 
     private Status getOpenStatusOrThrow() {
-        return statusRepository.findByStatusIgnoreCase("Open Positions")
+        return statusRepository.findByStatusIgnoreCase("Open")
                 .orElseThrow(() -> new IllegalStateException(
-                        "Master data missing: status 'Open Positions' not found. Seed it in status table."));
+                        "Master data missing: status 'Open' not found. Seed it in status table."));
     }
 
     private void applyCommonFields(Step2SubmitPayloadDTO p, AddDemand fin) {
@@ -289,12 +384,25 @@ public class AddNewDemandService {
         setIfNotNull(p.getPmoId(), id -> fin.setPmo(ref(Pmo.class, id)));
         setIfNotNull(p.getHbuId(), id -> fin.setHbu(ref(Hbu.class, id)));
         setIfNotNull(p.getHbuSpocId(), id -> fin.setHbuSpoc(ref(HbuSpoc.class, id)));
-
+        setIfNotNull(
+                p.getBusinessFunctionId(),
+                id -> fin.setBusinessFunction(ref(BusinessFunction.class, id))
+        );
+        setIfNotNull(p.getJobCategoryId(),
+                id -> fin.setJobCategory(ref(JobCategory.class, id)));
+        setIfNotNull(p.getContractTypeId(),
+                id -> fin.setContractType(ref(ContractType.class, id)));
         // VARCHAR now => String
         fin.setExperience(p.getExperience());
-
+        validateSummary(p.getRemark());
         fin.setRemark(p.getRemark());
-        fin.setDemandReceivedDate(LocalDate.now());
+        fin.setRemark(p.getRemark());
+        fin.setDemandReceivedDate(
+                p.getDemandReceivedDate() != null
+                        ? p.getDemandReceivedDate()
+                        : LocalDate.now()
+        );
+        fin.setCtoolId(p.getCtoolId());
 
 
         // NEW: isSubconRR (default to RR when null)
@@ -355,15 +463,18 @@ public class AddNewDemandService {
     public EditDemandResponseDTO editDemandById(Long id, EditDemandPayloadDTO dto, List<MultipartFile> files) {
         AddDemand demand = finalRepo.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Demand not found for id: " + id));
+
+        validateEditDemandPayload(dto);
         Map<String, Object> oldSnap = addDemandSnapshotBuilder.snapshot(demand);
 
         // capture old priority before update
+        Status oldStatus = demand.getStatus();
         String oldPriorityCode = demand.getPriority() != null ? demand.getPriority().getName() : null;
 
         // 0) RR uniqueness validation (because rr_number is UNIQUE)
         if (dto.getRrNumber() != null) {
-            Long newRr = dto.getRrNumber();
-            Long currentRr = demand.getRrNumber();
+            String newRr = dto.getRrNumber().trim();
+            String currentRr = demand.getRrNumber();
 
             // validate only if rr is changing
             if (currentRr == null || !newRr.equals(currentRr)) {
@@ -372,12 +483,20 @@ public class AddNewDemandService {
                     throw new IllegalArgumentException("rrNumber already exists: " + newRr);
                 }
             }
+
+            dto.setRrNumber(newRr);
         }
 
         // 1) Update editable scalar fields
+        setIfNotNull(dto.getCtoolId(),demand::setCtoolId);
         setIfNotNull(dto.getRrNumber(), demand::setRrNumber);
+//        setIfNotNull(dto.getRrFlag(), demand::setRrFlag);
         setIfNotNull(dto.getExperience(), demand::setExperience); // String now
         setIfNotNull(dto.getRemark(), demand::setRemark);
+        setIfNotNull(
+                dto.getDemandReceivedDate(),
+                demand::setDemandReceivedDate
+        );
 
 
         // NEW: toggle Subcon flag
@@ -407,6 +526,12 @@ public class AddNewDemandService {
         setIfNotNull(dto.getPmoId(), v -> demand.setPmo(ref(Pmo.class, v)));
         setIfNotNull(dto.getHbuId(), v -> demand.setHbu(ref(Hbu.class, v)));
         setIfNotNull(dto.getHbuSpocId(), v -> demand.setHbuSpoc(ref(HbuSpoc.class, v)));
+        setIfNotNull(
+                dto.getBusinessFunctionId(),
+                v -> demand.setBusinessFunction(ref(BusinessFunction.class, v))
+        );
+        setIfNotNull(dto.getJobCategoryId(), v -> demand.setJobCategory(ref(JobCategory.class, v)));
+        setIfNotNull(dto.getContractTypeId(), v -> demand.setContractType(ref(ContractType.class, v)));
 
 
         // 2) Many-to-many replace semantics
@@ -448,7 +573,7 @@ public class AddNewDemandService {
             boolean hasText = dto.getJdText() != null && !dto.getJdText().isBlank();
 
             if (hasFile || hasText) {
-                Long rrToUse = (dto.getRrNumber() != null) ? dto.getRrNumber() : demand.getRrNumber();
+                String rrToUse = (dto.getRrNumber() != null) ? dto.getRrNumber() : demand.getRrNumber();
 
                 RrJdRequestDTO rr = new RrJdRequestDTO();
                 rr.setRrNumber(rrToUse);
@@ -466,6 +591,11 @@ public class AddNewDemandService {
         demand.setUpdatedByName(getCurrentUserName());
 
 
+
+        handlePriorityDowngradeToP2(demand, oldPriorityCode);
+
+
+
         // 4) Apply P1 flag date logic
         applyP1FlagDateIfNeeded(demand, oldPriorityCode);
 
@@ -475,6 +605,32 @@ public class AddNewDemandService {
 
 
 //        auditService.recordUpdate(demand, oldSnap);
+//        try {
+//            Status newStatus = demand.getStatus();
+//
+//            boolean statusChanged =
+//                    oldStatus == null ||
+//                            !Objects.equals(oldStatus.getId(), newStatus != null ? newStatus.getId() : null);
+//
+//            if (statusChanged && newStatus != null) {
+//
+//                notificationService.notifyUsers(
+//                        "DEMAND",
+//                        demand.getId(),
+//                        "Demand Status Updated",
+//                        "Demand " + resolveLobPrefix(demand.getLob() != null ? demand.getLob().getId() : null)
+//                                + "-" + demand.getDemandId()
+//                                + " status changed from "
+//                                + (oldStatus != null ? oldStatus.getStatus() : "N/A")
+//                                + " to "
+//                                + newStatus.getStatus(),
+//                        getCurrentUserId()
+//                );
+//            }
+//
+//        } catch (Exception e) {
+//            log.warn("Failed to send demand status notification: {}", e.getMessage());
+//        }
 
 
         genericAuditService.recordUpdate(
@@ -520,7 +676,7 @@ public class AddNewDemandService {
         dto.setKaratFlag(source.getKaratFlag());
         dto.setP1FlagDate(source.getP1FlagDate());
         dto.setExperience(source.getExperience());
-        dto.setRemark("Copied from Demand PK ID " + sourceDemandPkId);
+//        dto.setRemark("Copied from Demand PK ID " + sourceDemandPkId);
 
         /* ---------- BUSINESS ---------- */
         dto.setDemandId(source.getDemandId());
@@ -546,6 +702,10 @@ public class AddNewDemandService {
         dto.setDeliveryManager(toRef(source.getDeliveryManager(), DeliveryManager::getName));
         dto.setSkillCluster(toRef(source.getSkillCluster(), SkillCluster::getName));
         dto.setProjectManager(toRef(source.getProjectManager(), ProjectManager::getName));
+        dto.setBusinessFunction(toRef(source.getBusinessFunction(), BusinessFunction::getName));
+        dto.setJobCategory(toRef(source.getJobCategory(), JobCategory::getName));
+        dto.setContractType(toRef(source.getContractType(), ContractType::getName));
+        dto.setCtoolId(source.getCtoolId());
 
         /* ---------- MANY TO MANY ---------- */
         dto.setPrimarySkills(
@@ -562,7 +722,6 @@ public class AddNewDemandService {
 
         return dto; // ✅ preview only, no DB insert
     }
-
 
     /**
      *  When priority change from p2 to p1 or p0 then set p1flag to current date
@@ -735,7 +894,15 @@ public class AddNewDemandService {
         }
     }
 
+
     private String storeJDText(Path dir, String jdText, String filenameHint) {
+
+        validateJdText(jdText);
+
+        if (filenameHint != null && !filenameHint.isBlank()) {
+            validatePlainTextField(filenameHint, "Filename hint", 255);
+        }
+
         String base = (filenameHint != null && !filenameHint.isBlank())
                 ? stripExtension(filenameHint)
                 : "jd";
@@ -754,6 +921,197 @@ public class AddNewDemandService {
         } catch (IOException e) {
             throw new RuntimeException("Failed to write JD text", e);
         }
+    }
+
+    // --------------------------------------------
+// Input validation for RR, JD text and file names
+// --------------------------------------------
+
+    private void validateRrAndJd(RrJdRequestDTO rr) {
+
+        if (rr == null) {
+            throw new IllegalArgumentException("RR detail is required");
+        }
+
+        validateRrNumber(rr.getRrNumber());
+
+        if (rr.getJdText() != null && !rr.getJdText().isBlank()) {
+            validateJdText(rr.getJdText());
+        }
+
+        if (rr.getFilenameHint() != null && !rr.getFilenameHint().isBlank()) {
+            validatePlainTextField(rr.getFilenameHint(), "Filename hint", 255);
+        }
+
+        if (rr.getFileName() != null && !rr.getFileName().isBlank()) {
+            validateFileName(rr.getFileName());
+        }
+    }
+
+    private void validateSingleJdFields(Step2SubmitPayloadDTO payload) {
+
+        if (payload == null) {
+            return;
+        }
+
+        if (payload.getSingleJdText() != null && !payload.getSingleJdText().isBlank()) {
+            validateJdText(payload.getSingleJdText());
+        }
+
+        if (payload.getSingleFilenameHint() != null && !payload.getSingleFilenameHint().isBlank()) {
+            validatePlainTextField(payload.getSingleFilenameHint(), "Single filename hint", 255);
+        }
+
+        if (payload.getSingleJdFileName() != null && !payload.getSingleJdFileName().isBlank()) {
+            validateFileName(payload.getSingleJdFileName());
+        }
+    }
+
+    private void validateEditDemandPayload(EditDemandPayloadDTO dto) {
+
+        if (dto == null) {
+            throw new IllegalArgumentException("Edit demand payload is required");
+        }
+
+        if (dto.getRrNumber() != null) {
+            validateRrNumber(dto.getRrNumber());
+        }
+
+        if (dto.getJdText() != null && !dto.getJdText().isBlank()) {
+            validateJdText(dto.getJdText());
+        }
+
+        if (dto.getFilenameHint() != null && !dto.getFilenameHint().isBlank()) {
+            validatePlainTextField(dto.getFilenameHint(), "Filename hint", 255);
+        }
+
+        if (dto.getFileName() != null && !dto.getFileName().isBlank()) {
+            validateFileName(dto.getFileName());
+        }
+
+//        if (dto.getRemark() != null && !dto.getRemark().isBlank()) {
+//            validatePlainTextField(dto.getRemark(), "Remark", 1000);
+//        }
+        if (dto.getRemark() != null && !dto.getRemark().isBlank()) {
+            validateSummary(dto.getRemark());
+        }
+    }
+
+    private void validateRrNumber(String rrNumber) {
+
+        if (rrNumber == null || rrNumber.trim().isEmpty()) {
+            throw new IllegalArgumentException("RR Number is required");
+        }
+
+        String value = rrNumber.trim();
+
+        if (value.length() > 50) {
+            throw new IllegalArgumentException("RR Number cannot be more than 50 characters");
+        }
+
+        if (containsHtmlOrScript(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in RR Number");
+        }
+
+        /*
+         * Allowed RR format:
+         * Letters, numbers, slash, underscore and hyphen.
+         * Example: RR-123, RR_123, RR/123
+         */
+        if (!value.matches("^[a-zA-Z0-9/_-]+$")) {
+            throw new IllegalArgumentException(
+                    "Invalid RR Number. Only letters, numbers, /, _ and - are allowed"
+            );
+        }
+    }
+
+    private void validateJdText(String jdText) {
+
+        if (jdText == null || jdText.isBlank()) {
+            return;
+        }
+
+        if (jdText.length() > 20000) {
+            throw new IllegalArgumentException("JD text cannot be more than 20000 characters");
+        }
+
+        if (containsHtmlOrScript(jdText)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in JD text");
+        }
+    }
+
+    private void validatePlainTextField(String value, String fieldName, int maxLength) {
+
+        if (value == null || value.isBlank()) {
+            return;
+        }
+
+        if (value.length() > maxLength) {
+            throw new IllegalArgumentException(fieldName + " cannot be more than " + maxLength + " characters");
+        }
+
+        if (containsHtmlOrScript(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in " + fieldName);
+        }
+    }
+
+    private void validateFileName(String fileName) {
+
+        if (fileName == null || fileName.isBlank()) {
+            return;
+        }
+
+        String value = fileName.trim();
+
+        if (value.length() > 255) {
+            throw new IllegalArgumentException("File name cannot be more than 255 characters");
+        }
+
+        if (containsHtmlOrScript(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in file name");
+        }
+
+        if (value.contains("..") || value.contains("/") || value.contains("\\")) {
+            throw new IllegalArgumentException("Invalid file name");
+        }
+    }
+
+    private void validateSummary(String summary) {
+
+        if (summary == null || summary.isBlank()) {
+            return;
+        }
+
+        String value = summary.trim();
+
+        if (containsHtmlOrScript(value)) {
+            throw new IllegalArgumentException(
+                    "HTML or script tags are not allowed in Summary");
+        }
+
+        if (value.length() > 5000) {
+            throw new IllegalArgumentException(
+                    "Summary cannot be more than 5000 characters");
+        }
+    }
+
+    private boolean containsHtmlOrScript(String value) {
+
+        if (value == null) {
+            return false;
+        }
+
+        String lower = value.toLowerCase(Locale.ROOT);
+
+        return lower.contains("<")
+                || lower.contains(">")
+                || lower.contains("script")
+                || lower.contains("javascript:")
+                || lower.contains("onerror")
+                || lower.contains("onload")
+                || lower.contains("onclick")
+                || lower.contains("onmouseover")
+                || lower.contains("alert(");
     }
 
     // --------------------------------------------
@@ -979,6 +1337,121 @@ public class AddNewDemandService {
                 .map(e -> toRef(e, nameExtractor))
                 .collect(Collectors.toSet());
     }
+
+    @Transactional
+
+    public void raiseRrFlag(Long demandId) {
+
+
+        AddDemand demand = finalRepo.findById(demandId)
+
+                .orElseThrow(() ->
+
+                        new ResourceNotFoundException(
+
+                                "Demand not found with id: " + demandId
+
+                        ));
+
+
+        Map<String, Object> oldSnap =
+
+                addDemandSnapshotBuilder.snapshot(demand);
+
+
+        demand.setRrFlag(true);
+
+        demand.setUpdatedByUserId(getCurrentUserId());
+
+        demand.setUpdatedByName(getCurrentUserName());
+
+
+        finalRepo.save(demand);
+
+
+        genericAuditService.recordUpdate(
+
+                AuditHistory.EntityType.ADD_DEMAND,
+
+                AuditHistory.Action.UPDATE_DEMAND,
+
+                demand,
+
+                oldSnap,
+
+                addDemandSnapshotBuilder,
+
+                addDemandAuditMeta,
+
+                getCurrentUserId()
+
+        );
+
+    }
+
+    @Transactional
+
+    public void unraiseRrFlag(Long demandId) throws BadRequestException {
+
+
+        AddDemand demand = finalRepo.findById(demandId)
+
+                .orElseThrow(() ->
+
+                        new ResourceNotFoundException(
+
+                                "Demand not found with id: " + demandId
+
+                        ));
+
+
+        if (!Boolean.TRUE.equals(demand.getRrFlag())) {
+
+            throw new BadRequestException(
+
+                    "RR flag is not raised for this demand"
+
+            );
+
+        }
+
+
+        Map<String, Object> oldSnap =
+
+                addDemandSnapshotBuilder.snapshot(demand);
+
+
+        demand.setRrFlag(false);
+
+        demand.setUpdatedByUserId(getCurrentUserId());
+
+        demand.setUpdatedByName(getCurrentUserName());
+
+
+        finalRepo.save(demand);
+
+
+        genericAuditService.recordUpdate(
+
+                AuditHistory.EntityType.ADD_DEMAND,
+
+                AuditHistory.Action.UPDATE_DEMAND,
+
+                demand,
+
+                oldSnap,
+
+                addDemandSnapshotBuilder,
+
+                addDemandAuditMeta,
+
+                getCurrentUserId()
+
+        );
+
+    }
+
+
 
 }
 

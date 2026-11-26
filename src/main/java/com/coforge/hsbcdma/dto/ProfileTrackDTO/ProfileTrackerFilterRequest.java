@@ -50,4 +50,6 @@ public class ProfileTrackerFilterRequest {
     private List<String> demandSecondarySkillNames;
     private List<String> demandLocationNames;
     private List<Long> demandLocationIds;
+
+    private String displayDemandId;
 }

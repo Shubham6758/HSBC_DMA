@@ -26,13 +26,11 @@ public class GlobalExceptionHandler {
     private static final Logger logger = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 
-
-
     /**
      * This method handles generic exception.
      * Created By : pratish.b
      */
-   @ExceptionHandler(Exception.class)
+    @ExceptionHandler(Exception.class)
     public ProblemDetail handleGeneric(Exception ex, WebRequest request) {
         logger.error("*** Inside handleGeneric() method.Unhandled exception", ex);
         ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
@@ -55,7 +53,7 @@ public class GlobalExceptionHandler {
                 "Internal Server Error",
                 // Avoid leaking internal details to clients in production
                 ex.getMessage(),
-                request.getRequestURI(),
+//                request.getRequestURI(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 Instant.now()
         );
@@ -73,7 +71,7 @@ public class GlobalExceptionHandler {
         ApiError body = new ApiError(
                 "Internal Server Error",
                 "Unexpected error occurred.",
-                request.getRequestURI(),
+//                request.getRequestURI(),
                 HttpStatus.INTERNAL_SERVER_ERROR.value(),
                 Instant.now()
         );
@@ -86,5 +84,54 @@ public class GlobalExceptionHandler {
 
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ex.getParameterName() + " is required");
+    }
+
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<?> handleInvalidCredentials(
+            InvalidCredentialsException ex,
+            HttpServletRequest request) {
+
+        ApiError body = new ApiError(
+                "Unauthorized",
+                ex.getMessage(),
+//                request.getRequestURI(),
+                HttpStatus.UNAUTHORIZED.value(),
+                Instant.now()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(body);
+    }
+
+    @ExceptionHandler(UnauthorizedException.class)
+    public ResponseEntity<?> handleUnauthorizedException(
+            UnauthorizedException ex,
+            HttpServletRequest request) {
+
+        ApiError body = new ApiError(
+                "Unauthorized",
+                ex.getMessage(),
+                HttpStatus.UNAUTHORIZED.value(),
+                Instant.now()
+        );
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                .body(body);
+    }
+
+    @ExceptionHandler(BadRequestException.class)
+    public ResponseEntity<?> handleBadRequestException(
+            BadRequestException ex,
+            HttpServletRequest request) {
+
+        ApiError body = new ApiError(
+                "Bad Request",
+                ex.getMessage(),
+                HttpStatus.BAD_REQUEST.value(),
+                Instant.now()
+        );
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(body);
     }
 }

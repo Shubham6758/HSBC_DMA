@@ -64,6 +64,18 @@ public class ProfileSnapshotBuilder implements SnapshotBuilder<Profile> {
                                 .collect(Collectors.toList())
         );
 
+        //karat
+        m.put("persona", p.getPersona() != null ? p.getPersona().getName() : null);
+        m.put("mentorBuddy", p.getMentorBuddy());
+        m.put("prepStatus", p.getPrepStatus() != null ? p.getPrepStatus().getName() : null);
+        m.put("startDate", p.getStartDate());
+        m.put("plannedEndDate", p.getPlannedEndDate());
+        m.put("coderpadResult1", p.getCoderpadResult1() != null ? p.getCoderpadResult1().getName() : null);
+        m.put("coderpadResult2", p.getCoderpadResult2() != null ? p.getCoderpadResult2().getName() : null);
+        m.put("karatReadyStatus", p.getKaratReadyStatus() != null ? p.getKaratReadyStatus().getName() : null);
+        m.put("karatTestDate", p.getKaratTestDate());
+        m.put("karatTestResult", p.getKaratTestResult() != null ? p.getKaratTestResult().getName() : null);
+
         return m;
     }
 

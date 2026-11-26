@@ -62,11 +62,25 @@ public record ProfileTrackerExportDTO(
                 demand != null && demand.getSkillCluster() != null ? demand.getSkillCluster().getName() : null,
                 demand != null ? demand.getPrimarySkills() : null,
                 demand != null ? demand.getSecondarySkills() : null,
-                demand != null && demand.getLob() != null ? demand.getLob().getLob() : null,
-                demand != null ? demand.getHbu().getName() : null,
-                demand != null ? demand.getDemandLocations(): null,
-                profile != null ? profile.getExternalInternal().getExternalInternal() : null,
-                demand != null ? demand.getHiringManager().getHiringManager() : null,
+                demand != null
+                        && demand.getLob() != null
+                        ? demand.getLob().getLob()
+                        : "",
+                demand != null
+                        && demand.getHbu() != null
+                        ? demand.getHbu().getName()
+                        : "",
+                demand != null
+                        ? demand.getDemandLocations()
+                        : null,
+                profile != null
+                        && profile.getExternalInternal() != null
+                        ? profile.getExternalInternal().getExternalInternal()
+                        : "",
+                demand != null
+                        && demand.getHiringManager() != null
+                        ? demand.getHiringManager().getHiringManager()
+                        : "",
 
                 // From ProfileTracker
                 pt.getAttachedDate(),

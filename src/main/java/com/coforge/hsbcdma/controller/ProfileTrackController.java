@@ -84,4 +84,12 @@ public class ProfileTrackController extends BaseController{
         return success(profileTrackService.getDropdowns());
     }
 
+    @PutMapping("/{trackerId}/remove")
+    public ResponseEntity<?> removeProfileFromDemand(
+            @PathVariable Long trackerId) {
+
+        return success(
+                profileTrackService.removeProfileFromDemand(trackerId)
+        );
+    }
 }

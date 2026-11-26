@@ -9,7 +9,6 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 @RequestMapping("/api")
 public class HistoryController {
-
     private final HistoryService demandHistoryService;
 
     /**

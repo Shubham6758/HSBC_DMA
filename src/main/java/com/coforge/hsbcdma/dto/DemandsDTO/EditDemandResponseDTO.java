@@ -9,6 +9,6 @@ public class EditDemandResponseDTO {
     private Long id;
     private Long demandId;
     private String displayDemandId;
-    private Long rrNumber;
+    private String rrNumber;
     private String fileName;
 }

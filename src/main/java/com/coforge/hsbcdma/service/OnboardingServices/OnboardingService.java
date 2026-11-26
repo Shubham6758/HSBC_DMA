@@ -29,6 +29,7 @@ import com.coforge.hsbcdma.repository.OnboardingRepositories.WbsTypeRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackerStatusRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.StatusRepository;
+import com.coforge.hsbcdma.service.NotificationServices.NotificationService;
 import com.coforge.hsbcdma.service.ProfileTrackerServices.ProfileTrackService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -71,6 +72,7 @@ public class OnboardingService {
     private final ProfileTrackerAuditMeta profileTrackerAuditMeta;
 
     private final ProfileTrackService profileTrackService;
+    private final NotificationService notificationService;
 
 
     @Transactional
@@ -151,6 +153,22 @@ public class OnboardingService {
 
         // ---- detect bgv status change AFTER potentially setting it ----
         boolean bgvChanged = (req.getBgvStatusId() != null) && !Objects.equals(oldBgvStatusId, req.getBgvStatusId());
+//        if (bgvChanged && ob.getBgvStatus() != null) {
+//            try {
+//                notificationService.notifyUsers(
+//                        "ONBOARDING",
+//                        ob.getId(),
+//                        "BGV Status Updated",
+//                        "BGV status for profile "
+//                                + ob.getProfile().getCandidateName()
+//                                + " changed to "
+//                                + ob.getBgvStatus().getName(),
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                // optional log
+//            }
+//        }
 
 
 
@@ -169,6 +187,24 @@ public class OnboardingService {
                 (oldOs == null && newOs != null) ||
                         (oldOs != null && newOs != null && !Objects.equals(oldOs.getId(), newOs.getId()));
 
+//        if (onboardingStatusChanged && newOs != null) {
+//            try {
+//                notificationService.notifyUsers(
+//                        "ONBOARDING",
+//                        ob.getId(),
+//                        "Onboarding Status Updated",
+//                        "Onboarding status for profile "
+//                                + ob.getProfile().getCandidateName()
+//                                + " changed from "
+//                                + (oldOs != null ? oldOs.getName() : "N/A")
+//                                + " to "
+//                                + newOs.getName(),
+//                        getCurrentUserId()
+//                );
+//            } catch (Exception e) {
+//                // optional log
+//            }
+//        }
         // ---- Backout Rule: if status becomes Backout Candidate/Resign -> update PT & Demand ----
         changed |= applyOnboardingBackoutRuleIfNeeded(ob, onboardingStatusChanged, newOs);
 
@@ -340,9 +376,9 @@ public class OnboardingService {
 
     /**
      * When OnboardingStatus changes to "Backout Candidate":
-     *  - External -> PT: "Backout Before Joining"  + Demand: "Open Positions" (audits)
-     *  - Internal -> PT: "Mapped to Other Demand"  + Demand: "Open Positions" (audits)
-     *  OT -> Abort Red BGV Pt: Red BGV Demand : Open positions
+     *  - External -> PT: "Backout Before Joining"  + Demand: "Open" (audits)
+     *  - Internal -> PT: "Mapped to Other Demand"  + Demand: "Open" (audits)
+     *  OT -> Abort Red BGV Pt: Red BGV Demand : Open
      *
      * @return true if any update was performed by this rule
      */
@@ -392,9 +428,9 @@ public class OnboardingService {
                 var demand = ob.getDemand();
 
                 Status openPositions = statusRepository
-                        .findByStatus("Open Positions")
+                        .findByStatus("Open")
                         .orElseThrow(() -> new IllegalStateException(
-                                "DemandStatus 'Open Positions' not found in master table"));
+                                "DemandStatus 'Open' not found in master table"));
 
                 boolean needsDemandUpdate = (demand.getStatus() == null) ||
                         !Objects.equals(demand.getStatus().getId(), openPositions.getId());
@@ -435,12 +471,12 @@ public class OnboardingService {
         if (ob.getProfile() != null && ob.getProfile().getExternalInternal() != null) {
             profileType = ob.getProfile().getExternalInternal().getName(); // adjust getter if different
         }
-        
+
 
         // Resolve Demand status "Open Positions"
         Status openPositions = statusRepository
-                .findByStatus("Open Positions")
-                .orElseThrow(() -> new IllegalStateException("DemandStatus 'Open Positions' not found in master table"));
+                .findByStatus("Open")
+                .orElseThrow(() -> new IllegalStateException("DemandStatus 'Open' not found in master table"));
 
         // ---------- External branch ----------
         if ("External".equalsIgnoreCase(profileType)) {
@@ -860,7 +896,7 @@ public class OnboardingService {
                 .bandName(d != null && d.getBand() != null ? d.getBand().getBand() : null)
                 .hiringManagerName(d != null && d.getHiringManager() != null ? d.getHiringManager().getHiringManager() : null)
                 .hbuName(d != null && d.getHbu() != null ? d.getHbu().getHbu() : null)
-                .pmoSpocName(d != null && d.getPmoSpoc() != null ? d.getPmoSpoc().getPmoSpoc() : null)
+                .pmoName(d != null && d.getPmo() != null ? d.getPmo().getPmo() : null)
 
                 .profileSharedDate(t != null ? t.getProfileSharedDate() : null)
                 .build();
@@ -919,6 +955,7 @@ public class OnboardingService {
                         : null)
 
                 .demand(OnboardingDemandDTO.builder()
+                        .demandPkId(demandEntity.getId())
                         .demandId(demandEntity.getDemandId())
                         .displayDemandId(displayDemandId)
                         .lob(demandEntity.getLob() != null
@@ -929,7 +966,7 @@ public class OnboardingService {
                                 ? demandEntity.getBand().getName()
                                 : null)
 
-                        .pmoSpoc(demandEntity.getPmo() != null
+                        .pmo(demandEntity.getPmo() != null
                                 ? demandEntity.getPmo().getName()
                                 : null)
 

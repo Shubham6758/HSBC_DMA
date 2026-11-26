@@ -25,5 +25,4 @@ public class ProfileAuditMeta implements AuditMetaExtractor<Profile> {
             return entity.getCreatedByUserId();
         return fallbackUserId;
     }
-
 }

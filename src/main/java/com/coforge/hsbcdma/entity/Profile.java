@@ -1,9 +1,9 @@
 package com.coforge.hsbcdma.entity;
 
 import com.coforge.hsbcdma.entity.dropdownEntities.*;
+import com.coforge.hsbcdma.entity.dropdownEntities.Profile.Karat.*;
 import com.coforge.hsbcdma.entity.dropdownEntities.Profile.*;
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Pattern;
 import lombok.Getter;
 import lombok.Setter;
 import org.hibernate.annotations.CreationTimestamp;
@@ -100,11 +100,14 @@ public class Profile extends BaseEntity {
     @Column(name = "file_name")
     private String fileName;
 
-    @Pattern(
-            regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$",
-            message = "Invalid PAN format"
-    )
-    @Column(name = "pan_number", length = 10)
+    @Column(name = "tech_irs_file_name")
+    private String techIrsFileName;
+
+//    @Pattern(
+//            regexp = "^[A-Z]{5}[0-9]{4}[A-Z]$",
+//            message = "Invalid PAN format"
+//    )
+    @Column(name = "pan_number")
     private String panNumber;
 
     @Column(name = "date_of_submission")
@@ -135,6 +138,16 @@ public class Profile extends BaseEntity {
     @Column(name = "ageing")
     private Integer ageing;
 
+    // Ageing
+    @Column(name = "ageing_stopped")
+    private Boolean ageingStopped = false;
+
+    @Column(name = "ageing_stop_date")
+    private LocalDate ageingStopDate;
+
+    @Column(name = "action_status")
+    private String actionStatus; // ACCEPTED / REJECTED / null
+
     @Column(name = "ageing_range")
     private String ageingRange;
 
@@ -164,7 +177,7 @@ public class Profile extends BaseEntity {
     private String officialNP;
 
     @Column(name = "negotiable_np_lwd")
-    private LocalDate negotiableNpLwd;
+    private String negotiableNpLwd;
 
     @Column(name = "recruiter", length = 255)
     private String recruiter;
@@ -209,13 +222,70 @@ public class Profile extends BaseEntity {
             cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<ProfileTracker> demandTrackers = new HashSet<>();
 
+
+    // ✅ Persona
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "persona_id")
+    private PersonaMaster persona;
+
+    // ✅ Mentor / Buddy
+    @Column(name = "mentor_buddy")
+    private String mentorBuddy;
+
+    // ✅ Prep Status
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "prep_status_id")
+    private PrepStatusMaster prepStatus;
+
+    // ✅ Start & Planned End Dates
+    @Column(name = "start_date")
+    private LocalDate startDate;
+
+    @Column(name = "planned_end_date")
+    private LocalDate plannedEndDate;
+
+    // ✅ Coderpad Results
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coderpad_result_1_id")
+    private CoderpadResultMaster coderpadResult1;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "coderpad_result_2_id")
+    private CoderpadResultMaster coderpadResult2;
+
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "karat_ready_status_id")
+    private KaratReadyStatusMaster karatReadyStatus;
+
+
+    @Column(name = "karat_ready_yes_date")
+    private LocalDate karatReadyYesDate;
+
+
+    // ✅ Karat Test Date
+    @Column(name = "karat_test_date")
+    private LocalDate karatTestDate;
+
+    // ✅ Karat Test Result
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "karat_test_result_id")
+    private KaratTestResultMaster karatTestResult;
+
+    // ✅ Karat Ageing (store optional OR calculate)
+    @Column(name = "karat_ageing")
+    private Integer karatAgeing;
+
+    @Column(name = "is_draft")
+    private Boolean isDraft = false;
+
     // ================= PRE-PROCESS =================
 
-    @PrePersist
-    @PreUpdate
-    private void normalizePan() {
-        if (this.panNumber != null) {
-            this.panNumber = this.panNumber.trim().toUpperCase();
-        }
-    }
+//    @PrePersist
+//    @PreUpdate
+//    private void normalizePan() {
+//        if (this.panNumber != null) {
+//            this.panNumber = this.panNumber.trim().toUpperCase();
+//        }
+//    }
 }

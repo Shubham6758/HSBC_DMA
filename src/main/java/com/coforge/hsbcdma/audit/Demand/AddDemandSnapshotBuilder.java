@@ -21,6 +21,7 @@ public class AddDemandSnapshotBuilder implements SnapshotBuilder<AddDemand> {
         m.put("id", d.getId());               // PK
         m.put("demandId", d.getDemandId());   // business demand_id
         m.put("rrNumber", d.getRrNumber());
+        m.put("rrFlag",  d.getRrFlag());
 
         // ---- scalar fields ----
         m.put("flag", d.getFlag());
@@ -29,7 +30,13 @@ public class AddDemandSnapshotBuilder implements SnapshotBuilder<AddDemand> {
         m.put("experience", d.getExperience());
         m.put("fileName", d.getFileName());
         m.put("remark", d.getRemark());
-        m.put("demandReceivedDate", d.getDemandReceivedDate());
+
+        m.put("demandReceivedDate",
+                d.getDemandReceivedDate() != null
+                        ? d.getDemandReceivedDate().toString()
+                        : null
+        );
+
 
         // ---- ManyToOne refs -> IDs only ----
         m.put("hbuId", ReflectionIdUtil.idOf(d.getHbu()));
@@ -54,7 +61,14 @@ public class AddDemandSnapshotBuilder implements SnapshotBuilder<AddDemand> {
         m.put("primarySkillIds", sortedIds(d.getPrimarySkills()));
         m.put("secondarySkillIds", sortedIds(d.getSecondarySkills()));
         m.put("locationIds", sortedIds(d.getDemandLocations()));
-
+        m.put("businessFunctionId",
+                ReflectionIdUtil.idOf(d.getBusinessFunction()));
+        m.put("jobCategoryId",
+                ReflectionIdUtil.idOf(d.getJobCategory()));
+        m.put("contractTypeId",
+                ReflectionIdUtil.idOf(d.getContractType()));
+        m.put("ctoolId",
+                d.getCtoolId());
         return m;
     }
 

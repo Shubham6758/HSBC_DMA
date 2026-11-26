@@ -1,39 +1,81 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--<configuration>-->
+
+<!--    &lt;!&ndash; Enable Spring profile-specific sections if needed &ndash;&gt;-->
+<!--    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="myapp"/>-->
+
+<!--    &lt;!&ndash; Pattern with timestamp, level, thread, logger, message &ndash;&gt;-->
+<!--    <property name="CONSOLE_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>-->
+<!--    <property name="FILE_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>-->
+
+<!--    &lt;!&ndash; Console &ndash;&gt;-->
+<!--    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">-->
+<!--        <encoder>-->
+<!--            <pattern>${CONSOLE_PATTERN}</pattern>-->
+<!--        </encoder>-->
+<!--    </appender>-->
+
+<!--    &lt;!&ndash; Rolling file: daily rotation, keep 30 days &ndash;&gt;-->
+<!--    <appender name="ROLLING" class="ch.qos.logback.core.rolling.RollingFileAppender">-->
+<!--        <file>/home/ubuntu/log/hsbcdma/hsbcdma.log</file>-->
+<!--        <encoder>-->
+<!--            <pattern>${FILE_PATTERN}</pattern>-->
+<!--        </encoder>-->
+<!--        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">-->
+<!--            <fileNamePattern>../logs/${appName}.%d{yyyy-MM-dd}.log.gz</fileNamePattern>-->
+<!--            <maxHistory>30</maxHistory>-->
+<!--        </rollingPolicy>-->
+<!--    </appender>-->
+
+<!--    &lt;!&ndash; Root logger &ndash;&gt;-->
+<!--    <root level="INFO">-->
+<!--        <appender-ref ref="CONSOLE"/>-->
+<!--        <appender-ref ref="ROLLING"/>-->
+<!--    </root>-->
+
+<!--    &lt;!&ndash; Package-specific level &ndash;&gt;-->
+<!--    &lt;!&ndash; <logger name="com.coforge" level="DEBUG"/>&ndash;&gt;-->
+<!--   <logger name="com.coforge" level="INFO"/>-->
+<!--  </configuration>-->
+
 <configuration>
 
-    <!-- Enable Spring profile-specific sections if needed -->
-    <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="myapp"/>
+    <!-- LOG PATTERN -->
+    <property name="LOG_PATTERN"
+              value="%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} [%X{correlationId}] - %msg%n"/>
 
-    <!-- Pattern with timestamp, level, thread, logger, message -->
-    <property name="CONSOLE_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>
-    <property name="FILE_PATTERN" value="%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n"/>
-
-    <!-- Console -->
+    <!-- ✅ CONSOLE APPENDER -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>${CONSOLE_PATTERN}</pattern>
+            <pattern>${LOG_PATTERN}</pattern>
         </encoder>
     </appender>
 
-    <!-- Rolling file: daily rotation, keep 30 days -->
-    <appender name="ROLLING" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>/home/ubuntu/log/hsbcdma/hsbcdma.log</file>
-        <encoder>
-            <pattern>${FILE_PATTERN}</pattern>
-        </encoder>
+    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/app.log</file>
+
         <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>../logs/${appName}.%d{yyyy-MM-dd}.log.gz</fileNamePattern>
-            <maxHistory>30</maxHistory>
+
+            <!-- ✅ Keep UNZIPPED logs -->
+            <fileNamePattern>/data/logs/app-%d{yyyy-MM-dd}.log</fileNamePattern>
+
+            <!-- ✅ Keep 90 days -->
+            <maxHistory>90</maxHistory>
+
         </rollingPolicy>
+
+        <encoder>
+            <pattern>${LOG_PATTERN}</pattern>
+        </encoder>
     </appender>
 
-    <!-- Root logger -->
+    <!-- ✅ ROOT LOGGER -->
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="ROLLING"/>
+        <appender-ref ref="FILE"/>
     </root>
 
-    <!-- Package-specific level -->
-    <!-- <logger name="com.coforge" level="DEBUG"/>-->
-   <logger name="com.coforge" level="INFO"/>
-  </configuration>
+    <!-- ✅ Your package (more detailed logs optional) -->
+    <logger name="com.coforge" level="DEBUG"/>
+
+</configuration>

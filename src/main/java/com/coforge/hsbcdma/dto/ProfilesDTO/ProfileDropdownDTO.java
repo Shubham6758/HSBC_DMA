@@ -22,4 +22,11 @@ public class ProfileDropdownDTO {
     private List<RefDTO> sources;
     private List<RefDTO> overallStatusRdgs;
 
+    private List<RefDTO> personas;
+    private List<RefDTO> prepStatuses;
+    private List<RefDTO> coderpadResults;
+    private List<RefDTO> karatReadyStatuses;
+    private List<RefDTO> karatTestResults;
+    private List<?>countryCodes;
+
 }

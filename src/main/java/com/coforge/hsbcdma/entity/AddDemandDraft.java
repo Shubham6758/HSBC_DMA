@@ -147,6 +147,30 @@ public class AddDemandDraft extends BaseEntity {
             cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<AddDemandRRDraft> rrDrafts = new HashSet<>();
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sub_lob_id")
+    private SubLob subLob;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_manager_id")
+    private ProjectManager projectManager;
+
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "business_function_id")
+    private BusinessFunction businessFunction;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "job_category_id")
+    private JobCategory jobCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "contract_type_id")
+    private ContractType contractType;
+
+    @Column(name = "ctool_id", length = 50)
+    private Long ctoolId;
+
 }
 
 

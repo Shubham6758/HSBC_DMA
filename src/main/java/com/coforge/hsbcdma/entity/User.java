@@ -1,7 +1,6 @@
 package com.coforge.hsbcdma.entity;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -42,7 +41,6 @@ public class User extends BaseEntity{
     @Column(name = "phone_number")
     private Long phoneNumber;
     @NotBlank
-    @Email
     private String emailId;
 //        @NotBlank(message = "Role can not be blank.")
 //    private String role;
@@ -99,6 +97,17 @@ public class User extends BaseEntity{
     private String activeToken;
 
     private LocalDateTime tokenExpiresAt;
+
+
+
+    @Column(name = "failed_attempts")
+    private Integer failedAttempts = 0;
+
+    @Column(name = "is_account_locked")
+    private Boolean accountLocked = false;
+
+    @Column(name = "lock_time")
+    private LocalDateTime lockTime;
 
 
 }

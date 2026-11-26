@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface BandRepository extends JpaRepository<Band,Long> {
 //    import
     Optional<Band> findByBandIgnoreCase(String band);
+
+    boolean existsByBandIgnoreCase(String name);
 }

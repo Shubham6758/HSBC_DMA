@@ -62,6 +62,40 @@ public class ProfileStorageService {
         }
     }
 
+    public String storeTechIrsFile(Long profileId, MultipartFile file) {
+
+        validateUpload(file);
+
+        Path dir = baseDir.resolve("profiles")
+                .resolve("profile-" + profileId)
+                .resolve("tech-irs")   // ✅ separate folder
+                .normalize();
+
+        ensureInsideBaseDir(dir);
+        createDirIfNotExists(dir);
+
+        String original = Optional.ofNullable(file.getOriginalFilename()).orElse("techirs.txt");
+        String base = sanitizeBaseName(stripExtension(original));
+        String ts = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String ext = getSafeDotExtension(original);
+
+        String finalName = "techirs_" + profileId + "_" + base + "_" + ts + ext;
+
+        Path target = dir.resolve(finalName).normalize();
+        ensureInsideBaseDir(target);
+
+        try {
+            Path tmp = dir.resolve(finalName + ".tmp");
+            Files.copy(file.getInputStream(), tmp, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(tmp, target,
+                    StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+            return finalName;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to store Tech IRS file", e);
+        }
+    }
+
     // ----------------------------
     // Same helper methods as demands
     // ----------------------------
@@ -180,7 +214,7 @@ public class ProfileStorageService {
 
             // OOXML: docx/xlsx/pptx => zip => 'PK'
             if (ext.equals("docx") || ext.equals("xlsx") || ext.equals("pptx")) {
-                return header.length >= 2 && header[0] == 'P' && header[1] == 'K';
+                return true;
             }
 
             return true;

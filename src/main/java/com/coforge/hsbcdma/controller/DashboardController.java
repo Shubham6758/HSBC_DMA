@@ -1,6 +1,69 @@
+//package com.coforge.hsbcdma.controller;
+//
+//import com.coforge.hsbcdma.dto.DashboardDTO.DashboardCountDto;
+//import com.coforge.hsbcdma.dto.DashboardDTO.HbuSummaryDto;
+//import com.coforge.hsbcdma.dto.DashboardDTO.LobSummaryDto;
+//import com.coforge.hsbcdma.dto.DashboardDTO.PrioritySummaryDto;
+//import com.coforge.hsbcdma.service.DashboardServices.DashboardService;
+//import org.springframework.http.ResponseEntity;
+//import org.springframework.web.bind.annotation.GetMapping;
+//import org.springframework.web.bind.annotation.RequestMapping;
+//import org.springframework.web.bind.annotation.RequestParam;
+//import org.springframework.web.bind.annotation.RestController;
+//
+//import java.time.LocalDate;
+//import java.util.List;
+//
+//@RestController
+//@RequestMapping("/api/dashboard")
+//public class DashboardController {
+//
+//    private final DashboardService dashboardService;
+//
+//    public DashboardController(DashboardService dashboardService) {
+//        this.dashboardService = dashboardService;
+//    }
+//    @GetMapping("/lob-summary")
+//    public ResponseEntity<List<LobSummaryDto>> getLobSummary(
+//            @RequestParam LocalDate fromDate,
+//            @RequestParam LocalDate toDate) {
+//
+//        return ResponseEntity.ok(
+//                dashboardService.getLobSummary(fromDate, toDate)
+//        );
+//    }
+//    @GetMapping("/hbu-summary")
+//    public ResponseEntity<List<HbuSummaryDto>> getHbuSummary(
+//            @RequestParam LocalDate fromDate,
+//            @RequestParam LocalDate toDate) {
+//
+//        return ResponseEntity.ok(
+//                dashboardService.getHbuSummary(fromDate, toDate)
+//        );
+//    }
+//    @GetMapping("/priority-summary")
+//    public ResponseEntity<PrioritySummaryDto> getPrioritySummary(
+//            @RequestParam LocalDate fromDate,
+//            @RequestParam LocalDate toDate) {
+//
+//        PrioritySummaryDto response =
+//                dashboardService.getPrioritySummary(fromDate, toDate);
+//
+//        return ResponseEntity.ok(response);
+//    }
+//
+//    @GetMapping("/dashboard-count")
+//    public DashboardCountDto getDashboardCount(
+//            @RequestParam LocalDate fromDate,
+//            @RequestParam LocalDate toDate) {
+//
+//        return dashboardService.getDashboardCounts(fromDate, toDate);
+//    }
+//}
+//
 package com.coforge.hsbcdma.controller;
 
-import com.coforge.hsbcdma.dto.DashboardDTO.DashboardCountDto;
+import com.coforge.hsbcdma.dto.DashboardDTO.*;
 import com.coforge.hsbcdma.dto.DashboardDTO.HbuSummaryDto;
 import com.coforge.hsbcdma.dto.DashboardDTO.LobSummaryDto;
 import com.coforge.hsbcdma.dto.DashboardDTO.PrioritySummaryDto;
@@ -23,41 +86,172 @@ public class DashboardController {
     public DashboardController(DashboardService dashboardService) {
         this.dashboardService = dashboardService;
     }
+
     @GetMapping("/lob-summary")
     public ResponseEntity<List<LobSummaryDto>> getLobSummary(
+
             @RequestParam LocalDate fromDate,
-            @RequestParam LocalDate toDate) {
+            @RequestParam LocalDate toDate,
+
+            @RequestParam(required = false)
+            List<Long> hbuIds,
+
+            @RequestParam(required = false)
+            List<Long> lobIds,
+
+            @RequestParam(required = false)
+            List<Long> hmIds,
+
+            @RequestParam(required = false)
+            List<Long> skillIds,
+
+            @RequestParam(required = false)
+            List<Long> priorityIds
+
+    ) {
 
         return ResponseEntity.ok(
-                dashboardService.getLobSummary(fromDate, toDate)
+                dashboardService.getLobSummary(
+                        fromDate,
+                        toDate,
+                        hbuIds,
+                        lobIds,
+                        hmIds,
+                        skillIds,
+                        priorityIds
+                )
         );
     }
+
     @GetMapping("/hbu-summary")
     public ResponseEntity<List<HbuSummaryDto>> getHbuSummary(
+
             @RequestParam LocalDate fromDate,
-            @RequestParam LocalDate toDate) {
+            @RequestParam LocalDate toDate,
+
+            @RequestParam(required = false)
+            List<Long> hbuIds,
+
+            @RequestParam(required = false)
+            List<Long> lobIds,
+
+            @RequestParam(required = false)
+            List<Long> hmIds,
+
+            @RequestParam(required = false)
+            List<Long> skillIds,
+
+            @RequestParam(required = false)
+            List<Long> priorityIds
+    ) {
 
         return ResponseEntity.ok(
-                dashboardService.getHbuSummary(fromDate, toDate)
+                dashboardService.getHbuSummary(
+                        fromDate,
+                        toDate,
+                        hbuIds,
+                        lobIds,
+                        hmIds,
+                        skillIds,
+                        priorityIds
+                )
         );
     }
+
+
     @GetMapping("/priority-summary")
     public ResponseEntity<PrioritySummaryDto> getPrioritySummary(
+
             @RequestParam LocalDate fromDate,
-            @RequestParam LocalDate toDate) {
+            @RequestParam LocalDate toDate,
 
-        PrioritySummaryDto response =
-                dashboardService.getPrioritySummary(fromDate, toDate);
+            @RequestParam(required = false)
+            List<Long> hbuIds,
 
-        return ResponseEntity.ok(response);
+            @RequestParam(required = false)
+            List<Long> lobIds,
+
+            @RequestParam(required = false)
+            List<Long> hmIds,
+
+            @RequestParam(required = false)
+            List<Long> skillIds,
+
+            @RequestParam(required = false)
+            List<Long> priorityIds
+    ) {
+
+        return ResponseEntity.ok(
+                dashboardService.getPrioritySummary(
+                        fromDate,
+                        toDate,
+                        hbuIds,
+                        lobIds,
+                        hmIds,
+                        skillIds,
+                        priorityIds
+                )
+        );
     }
 
     @GetMapping("/dashboard-count")
     public DashboardCountDto getDashboardCount(
             @RequestParam LocalDate fromDate,
-            @RequestParam LocalDate toDate) {
+            @RequestParam LocalDate toDate,
 
-        return dashboardService.getDashboardCounts(fromDate, toDate);
+            @RequestParam(required = false)
+            List<Long> hbuIds,
+
+            @RequestParam(required = false)
+            List<Long> lobIds,
+
+            @RequestParam(required = false)
+            List<Long> hmIds,
+
+            @RequestParam(required = false)
+            List<Long> skillIds,
+
+            @RequestParam(required = false)
+            List<Long> priorityIds
+    ) {
+
+        return dashboardService.getDashboardCounts(
+                fromDate,
+                toDate,
+                hbuIds,
+                lobIds,
+                hmIds,
+                skillIds,
+                priorityIds
+        );
+    }
+
+    @GetMapping("/demand-filter-count")
+    public DemandFilterCountDTO getDemandCount(
+
+            @RequestParam(required = false)
+            List<Long> hbuIds,
+
+            @RequestParam(required = false)
+            List<Long> lobIds,
+
+            @RequestParam(required = false)
+            List<Long> hmIds,
+
+            @RequestParam(required = false)
+            List<Long> skillIds,
+
+            @RequestParam(required = false)
+            List<Long> priorityIds
+    ) {
+
+        return dashboardService.getDemandCount(
+                hbuIds,
+                lobIds,
+                hmIds,
+                skillIds,
+                priorityIds
+        );
     }
 }
 

@@ -1,5 +1,12 @@
 package com.coforge.hsbcdma.dto.DemandsDTO;
 
+import com.coforge.hsbcdma.validation.NoHtml;
+import com.coforge.hsbcdma.validation.ValidFileName;
+import com.coforge.hsbcdma.validation.ValidRrNumber;
+import com.coforge.hsbcdma.validation.ValidSummary;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 import java.time.LocalDate;
@@ -8,11 +15,19 @@ import java.util.List;
 @Data
 public class AddDemandDraftCreateRequest {
 
-    // Draft fields
     private Boolean flag;
+
+    @Min(value = 1, message = "Number of positions must be greater than 0")
     private Integer numberOfPositions;
+
+    @NoHtml
+    @Size(max = 100, message = "Experience cannot exceed 100 characters")
     private String experience;
+
+    @ValidFileName
     private String fileName;
+
+    @ValidSummary
     private String remark;
 
     private LocalDate demandReceivedDate;
@@ -20,8 +35,6 @@ public class AddDemandDraftCreateRequest {
     private String createdByUserId;
     private String createdByName;
 
-
-    // Dropdown references as IDs (recommended for POST payload)
     private Long hbuId;
     private Long hubSpocId;
     private Long bandId;
@@ -38,33 +51,39 @@ public class AddDemandDraftCreateRequest {
     private Long hiringManagerId;
     private Long deliveryManagerId;
     private Long skillClusterId;
+
     private Boolean karatFlag;
 
-    // Many-to-many as ids (optional)
     private List<Long> primarySkillIds;
     private List<Long> secondarySkillIds;
     private List<Long> locationIds;
+    private Long subLobId;
+    private Long projectManagerId;
+    private Long businessFunctionId;
+    private Long jobCategoryId;
+    private Long contractTypeId;
+    private Long ctoolId;
 
-    // RR Draft rows
+    @Valid
     private List<RrDraftRequest> rrDrafts;
 
     @Data
     public static class RrDraftRequest {
-        private Long rrNumber;
 
-        // keep your earlier field
-        private String fileName; // server will overwrite with stored RR JD filename
+        @ValidRrNumber
+        private String rrNumber;
 
-        // ✅ ADD these 3 fields inside RR as you asked
-        private Integer fileIndex;      // RR JD file position in files[]
-        private String jdText;          // optional RR JD text
-        private String filenameHint;    // optional filename hint for RR text
+        @ValidFileName
+        private String fileName;
 
+        private Integer fileIndex;
 
-        // NEW
-        private Boolean isSubconRR;  // true => Subcon, false => RR, null => unspecified in draft
+        private String jdText;
 
+        @NoHtml
+        @Size(max = 255, message = "Filename hint cannot exceed 255 characters")
+        private String filenameHint;
 
+        private Boolean isSubconRR;
     }
 }
-

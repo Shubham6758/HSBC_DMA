@@ -3,6 +3,7 @@ package com.coforge.hsbcdma.Import;
 import com.coforge.hsbcdma.entity.AddDemand;
 import com.coforge.hsbcdma.entity.Location;
 import com.coforge.hsbcdma.entity.dropdownEntities.*;
+import com.coforge.hsbcdma.repository.DemandRepositories.AddDemandRepository;
 import com.coforge.hsbcdma.repository.LocationRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.*;
 import lombok.RequiredArgsConstructor;
@@ -49,6 +50,10 @@ public class ExcelImportHelper {
     private final PrimarySkillsRepository   primarySkillsRepo;
     private final SecondarySkillsRepository secondarySkillsRepo;
     private final LocationRepository        locationRepo;
+    private final AddDemandRepository demandRepository;
+    private final BusinessFunctionRepository businessFunctionRepo;
+    private final JobCategoryRepository jobCategoryRepo;
+    private final ContractTypeRepository contractTypeRepo;
 
     public boolean isValidExcelFile(MultipartFile file) {
         return EXCEL_TYPE.equals(file.getContentType());
@@ -145,7 +150,7 @@ public class ExcelImportHelper {
     // within the same import run.
     // ─────────────────────────────────────────────────────────────────────────
     @Transactional
-    public List<AddDemand> parseExcelFile(InputStream inputStream) {
+    public DemandImportResponse parseExcelFile(InputStream inputStream) {
         List<AddDemand> demands = new ArrayList<>();
 
         // ── Preload all master caches ───────────────────────────────────────
@@ -170,260 +175,568 @@ public class ExcelImportHelper {
         Map<String, PrimarySkills>    primarySkillsCache    = preloadToMap(primarySkillsRepo.findAll(), PrimarySkills::getPrimarySkills);
         Map<String, SecondarySkills>  secondarySkillsCache  = preloadToMap(secondarySkillsRepo.findAll(), SecondarySkills::getSecondarySkills);
         Map<String, Location>         locationCache         = preloadToMap(locationRepo.findAll(), Location::getName);
+        Map<String, BusinessFunction> businessFunctionCache =
+                preloadToMap(
+                        businessFunctionRepo.findAll(),
+                        BusinessFunction::getBusinessFunction
+                );
+        Map<String,JobCategory> jobCategoryCache =
+                preloadToMap(jobCategoryRepo.findAll(), JobCategory::getJobCategory);
+        Map<String,ContractType> contractTypeCache =
+                preloadToMap(contractTypeRepo.findAll(), ContractType::getContractType);
 
         try (Workbook workbook = new XSSFWorkbook(inputStream)) {
-            Sheet sheet = workbook.getSheetAt(0);
 
-            for (Row row : sheet) {
-                if (row.getRowNum() == 0) continue; // skip header
-                if (isRowEmpty(row))     continue; // skip blank rows
+            String[] sheets = {
+                    "Offshore Demands",
+                    "Onsite Demand Sheet"
+            };
 
-                AddDemand demand = new AddDemand();
+            List<String> errors = new ArrayList<>();
 
-                // ── Col A : Demand ID ──────────────────────────────────────
-                demand.setDemandId(getLongValue(row.getCell(0)));
+            for (String sheetName : sheets) {
 
-                // ── Col B : RR Number ─────────────────────────────────────
-                demand.setRrNumber(getLongValue(row.getCell(1)));
+                Sheet sheet = workbook.getSheet(sheetName);
 
-                // ── Col C : LOB ───────────────────────────────────────────
-                demand.setLob(resolveOrCreate(
-                        getStringValue(row.getCell(2)),
-                        lobCache,
-                        lobRepo::findByLob,     // adjust if you have IgnoreCase variant
-                        Lob::new,
-                        Lob::setLob,
-                        lobRepo::save
-                ));
+                if (sheet == null) {
+                    continue;
+                }
 
-                // ── Col D : Sub LOB ───────────────────────────────────────
-                demand.setSubLob(resolveOrCreate(
-                        getStringValue(row.getCell(3)),
-                        subLobCache,
-                        subLobRepo::findBySubLobIgnoreCase,
-                        SubLob::new,
-                        SubLob::setSubLob,
-                        subLobRepo::save
-                ));
+                Map<String, Integer> headerMap =
+                        ExcelColumnHelper.getHeaderIndexMap(sheet);
 
-                // ── Col E : HBU ───────────────────────────────────────────
-                demand.setHbu(resolveOrCreate(
-                        getStringValue(row.getCell(4)),
-                        hbuCache,
-                        hbuRepo::findByHbuIgnoreCase,
-                        Hbu::new,
-                        Hbu::setHbu,
-                        hbuRepo::save
-                ));
+                for (Row row : sheet) {
 
-                // ── Col F : Band ──────────────────────────────────────────
-                demand.setBand(resolveOrCreate(
-                        getStringValue(row.getCell(5)),
-                        bandCache,
-                        bandRepo::findByBandIgnoreCase,
-                        Band::new,
-                        Band::setBand,
-                        bandRepo::save
-                ));
+                    if (row.getRowNum() == 0) {
+                        continue;
+                    }
 
-                // ── Col G : Priority ──────────────────────────────────────
-                demand.setPriority(resolveOrCreate(
-                        getStringValue(row.getCell(6)),
-                        priorityCache,
-                        priorityRepo::findByPriorityIgnoreCase,
-                        Priority::new,
-                        Priority::setPriority,
-                        priorityRepo::save
-                ));
+                    if (isRowEmpty(row)) {
+                        continue;
+                    }
 
-                // ── Col H : Status ────────────────────────────────────────
-                demand.setStatus(resolveOrCreate(
-                        getStringValue(row.getCell(7)),
-                        statusCache,
-                        statusRepo::findByStatusIgnoreCase,
-                        Status::new,
-                        Status::setStatus,
-                        statusRepo::save
-                ));
+                    try {
 
-                // ── Col I : Demand Type ───────────────────────────────────
-                demand.setDemandType(resolveOrCreate(
-                        getStringValue(row.getCell(8)),
-                        demandTypeCache,
-                        demandTypeRepo::findByDemandTypeIgnoreCase,
-                        DemandType::new,
-                        DemandType::setDemandType,
-                        demandTypeRepo::save
-                ));
+                        AddDemand demand = new AddDemand();
 
-                // ── Col J : Demand Timeline ───────────────────────────────
-                demand.setDemandTimeline(resolveOrCreate(
-                        getStringValue(row.getCell(9)),
-                        demandTimelineCache,
-                        demandTimelineRepo::findByDemandTimeLineIgnoreCase,
-                        DemandTimeLine::new,
-                        DemandTimeLine::setDemandTimeLine,
-                        demandTimelineRepo::save
-                ));
+                        // ============================
+                        // DEMAND NUMBER (MANDATORY)
+                        // ============================
 
-                // ── Col K : External / Internal ───────────────────────────
-                demand.setExternalInternal(resolveOrCreate(
-                        getStringValue(row.getCell(10)),
-                        externalInternalCache,
-                        externalInternalRepo::findByExternalInternalIgnoreCase,
-                        ExternalInternal::new,
-                        ExternalInternal::setExternalInternal,
-                        externalInternalRepo::save
-                ));
+                        Long demandNumber =
+                                getLongValue(
+                                        ExcelColumnHelper.getCell(
+                                                row,
+                                                headerMap,
+                                                "Demand Number"
+                                        )
+                                );
 
-                // ── Col L : POD ───────────────────────────────────────────
-                demand.setPod(resolveOrCreate(
-                        getStringValue(row.getCell(11)),
-                        podCache,
-                        podRepo::findByPodIgnoreCase,
-                        Pod::new,
-                        Pod::setPod,
-                        podRepo::save
-                ));
+                        if (demandNumber == null) {
 
-                // ── Col M : PMO ───────────────────────────────────────────
-                demand.setPmo(resolveOrCreate(
-                        getStringValue(row.getCell(12)),
-                        pmoCache,
-                        pmoRepo::findByPmoIgnoreCase,
-                        Pmo::new,
-                        Pmo::setPmo,
-                        pmoRepo::save
-                ));
+                            errors.add(
+                                    sheetName +
+                                            " Row " +
+                                            (row.getRowNum() + 1) +
+                                            " : Demand Number is mandatory"
+                            );
 
-                // ── Col N : PMO SPOC ──────────────────────────────────────
-                demand.setPmoSpoc(resolveOrCreate(
-                        getStringValue(row.getCell(13)),
-                        pmoSpocCache,
-                        pmoSpocRepo::findByPmoSpocIgnoreCase,
-                        PmoSpoc::new,
-                        PmoSpoc::setPmoSpoc,
-                        pmoSpocRepo::save
-                ));
+                            continue;
+                        }
 
-                // ── Col O : Sales SPOC ────────────────────────────────────
-                demand.setSalesSpoc(resolveOrCreate(
-                        getStringValue(row.getCell(14)),
-                        salesSpocCache,
-                        salesSpocRepo::findBySalesSpocIgnoreCase,
-                        SalesSpoc::new,
-                        SalesSpoc::setSalesSpoc,
-                        salesSpocRepo::save
-                ));
+                        demand.setDemandId(demandNumber);
 
-                // ── Col P : Hiring Manager ────────────────────────────────
-                demand.setHiringManager(resolveOrCreate(
-                        getStringValue(row.getCell(15)),
-                        hiringManagerCache,
-                        hiringManagerRepo::findByHiringManagerIgnoreCase,
-                        HiringManager::new,
-                        HiringManager::setHiringManager,
-                        hiringManagerRepo::save
-                ));
+                        // ============================
+                        // LOB (MANDATORY)
+                        // ============================
 
-                // ── Col Q : Delivery Manager ──────────────────────────────
-                demand.setDeliveryManager(resolveOrCreate(
-                        getStringValue(row.getCell(16)),
-                        deliveryManagerCache,
-                        deliveryManagerRepo::findByDeliveryManagerIgnoreCase,
-                        DeliveryManager::new,
-                        DeliveryManager::setDeliveryManager,
-                        deliveryManagerRepo::save
-                ));
+                        String lobName =
+                                getRequiredString(
+                                        row,
+                                        headerMap,
+                                        "Lob"
+                                );
 
-                // ── Col R : Skill Cluster ─────────────────────────────────
-                demand.setSkillCluster(resolveOrCreate(
-                        getStringValue(row.getCell(17)),
-                        skillClusterCache,
-                        skillClusterRepo::findBySkillClusterIgnoreCase,
-                        SkillCluster::new,
-                        SkillCluster::setSkillCluster,
-                        skillClusterRepo::save
-                ));
+                        if (lobName == null || lobName.isBlank()) {
 
-                // ── Col S : Project Manager ───────────────────────────────
-                demand.setProjectManager(resolveOrCreate(
-                        getStringValue(row.getCell(18)),
-                        projectManagerCache,
-                        projectManagerRepo::findByProjectManagerIgnoreCase,
-                        ProjectManager::new,
-                        ProjectManager::setProjectManager,
-                        projectManagerRepo::save
-                ));
+                            errors.add(
+                                    sheetName +
+                                            " Row " +
+                                            (row.getRowNum() + 1) +
+                                            " : Lob is mandatory"
+                            );
 
-                // ── Col T : HBU SPOC ──────────────────────────────────────
-                demand.setHbuSpoc(resolveOrCreate(
-                        getStringValue(row.getCell(19)),
-                        hbuSpocCache,
-                        hbuSpocRepo::findByHbuSpocIgnoreCase,
-                        HbuSpoc::new,
-                        HbuSpoc::setHbuSpoc,
-                        hbuSpocRepo::save
-                ));
+                            continue;
+                        }
 
-                // ── Col U : Primary Skills (comma-separated) ──────────────
-                Set<PrimarySkills> primarySkills = resolveOrCreateSet(
-                        getStringValue(row.getCell(20)),
-                        primarySkillsCache,
-                        primarySkillsRepo::findByPrimarySkillsIgnoreCase,
-                        PrimarySkills::new,
-                        PrimarySkills::setPrimarySkills,
-                        primarySkillsRepo::save
-                );
-                demand.setPrimarySkills(primarySkills);
+                        Lob lob =
+                                getOrCreateLob(
+                                        lobName,
+                                        lobCache
+                                );
 
-                // ── Col V : Secondary Skills (comma-separated) ────────────
-                Set<SecondarySkills> secondarySkills = resolveOrCreateSet(
-                        getStringValue(row.getCell(21)),
-                        secondarySkillsCache,
-                        secondarySkillsRepo::findBySecondarySkillsIgnoreCase,
-                        SecondarySkills::new,
-                        SecondarySkills::setSecondarySkills,
-                        secondarySkillsRepo::save
-                );
-                demand.setSecondarySkills(secondarySkills);
+                        demand.setLob(lob);
 
-                // ── Col W : Locations (comma-separated) ───────────────────
-                Set<Location> locations = resolveOrCreateSet(
-                        getStringValue(row.getCell(22)),
-                        locationCache,
-                        locationRepo::findByNameIgnoreCase,
-                        Location::new,
-                        Location::setName,
-                        locationRepo::save
-                );
-                // If you want "onshore by default" for new Location:
-                // -> Add a default in the entity or here after creation by checking if it's new.
-                demand.setDemandLocations(locations);
+                        // ============================
+                        // SUB LOB
+                        // ============================
 
-                // ── Col X : Experience ────────────────────────────────────
-                demand.setExperience(getStringValue(row.getCell(23)));
+                        String subLobName =
+                                getRequiredString(
+                                        row,
+                                        headerMap,
+                                        "Sub Lob"
+                                );
 
-                // ── Col Y : Remark ────────────────────────────────────────
-                demand.setRemark(getStringValue(row.getCell(24)));
+                        boolean hasSubLobby =
+                                subLobRepo.existsByLobId(
+                                        lob.getId()
+                                );
 
-                // ── Col Z : Demand Received Date ──────────────────────────
-                demand.setDemandReceivedDate(getDateValue(row.getCell(25)));
+                        if (hasSubLobby &&
+                                (subLobName == null ||
+                                        subLobName.isBlank())) {
 
-                // ── Col AA : Is Subcon RR ─────────────────────────────────
-                demand.setIsSubconRR(getBooleanValue(row.getCell(26)));
+                            errors.add(
+                                    sheetName +
+                                            " Row " +
+                                            (row.getRowNum() + 1) +
+                                            " : Sub Lob is mandatory for Lob "
+                                            + lobName
+                            );
 
-                // ── Col AB : Karat Flag ───────────────────────────────────
-                demand.setKaratFlag(getBooleanValue(row.getCell(27)));
+                            continue;
+                        }
 
-                demands.add(demand);
+                        if (subLobName != null &&
+                                !subLobName.isBlank()) {
+
+                            demand.setSubLob(
+                                    getOrCreateSubLob(
+                                            subLobName,
+                                            lob,
+                                            subLobCache
+                                    )
+                            );
+                        }
+
+                        // ============================
+                        // DEMAND RECEIVED DATE
+                        // ============================
+
+                        demand.setDemandReceivedDate(
+
+                                getDateValue(
+                                        ExcelColumnHelper.getCell(
+                                                row,
+                                                headerMap,
+                                                "Demand Received Date"
+                                        )
+                                )
+                        );
+
+                        // ============================
+                        // POD
+                        // ============================
+
+                        demand.setPod(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "POD/Program Name"
+                                        ),
+                                        podCache,
+                                        podRepo::findByPodIgnoreCase,
+                                        Pod::new,
+                                        Pod::setPod,
+                                        podRepo::save
+                                )
+                        );
+
+                        // ============================
+                        // HIRING MANAGER
+                        // ============================
+
+                        demand.setHiringManager(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Hiring Manager"
+                                        ),
+                                        hiringManagerCache,
+                                        hiringManagerRepo::findByHiringManagerIgnoreCase,
+                                        HiringManager::new,
+                                        HiringManager::setHiringManager,
+                                        hiringManagerRepo::save
+                                )
+                        );
+
+                        // ============================
+                        // DEMAND TYPE
+                        // ============================
+
+                        demand.setDemandType(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "DemandType"
+                                        ),
+                                        demandTypeCache,
+                                        demandTypeRepo::findByDemandTypeIgnoreCase,
+                                        DemandType::new,
+                                        DemandType::setDemandType,
+                                        demandTypeRepo::save
+                                )
+                        );
+
+                        // ============================
+                        // SKILL CLUSTER
+                        // ============================
+
+                        demand.setSkillCluster(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Skill Cluster"
+                                        ),
+                                        skillClusterCache,
+                                        skillClusterRepo::findBySkillClusterIgnoreCase,
+                                        SkillCluster::new,
+                                        SkillCluster::setSkillCluster,
+                                        skillClusterRepo::save
+                                )
+                        );
+
+                        // ============================
+                        // PRIMARY SKILL
+                        // ============================
+
+                        demand.setPrimarySkills(
+
+                                resolveOrCreateSet(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Primary Skill"
+                                        ),
+                                        primarySkillsCache,
+                                        primarySkillsRepo::findByPrimarySkillsIgnoreCase,
+                                        PrimarySkills::new,
+                                        PrimarySkills::setPrimarySkills,
+                                        primarySkillsRepo::save
+                                )
+                        );
+
+                        // ============================
+                        // SECONDARY SKILL
+                        // ============================
+
+                        demand.setSecondarySkills(
+
+                                resolveOrCreateSet(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "secondary skill"
+                                        ),
+                                        secondarySkillsCache,
+                                        secondarySkillsRepo::findBySecondarySkillsIgnoreCase,
+                                        SecondarySkills::new,
+                                        SecondarySkills::setSecondarySkills,
+                                        secondarySkillsRepo::save
+                                )
+                        );
+
+                        demand.setExperience(
+                                getRequiredString(
+                                        row,
+                                        headerMap,
+                                        "Exp"
+                                )
+                        );
+
+                        demand.setPriority(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Priority"
+                                        ),
+                                        priorityCache,
+                                        priorityRepo::findByPriorityIgnoreCase,
+                                        Priority::new,
+                                        Priority::setPriority,
+                                        priorityRepo::save
+                                )
+                        );
+
+                        demand.setDemandLocations(
+
+                                resolveOrCreateSet(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Demand Location"
+                                        ),
+                                        locationCache,
+                                        locationRepo::findByNameIgnoreCase,
+                                        Location::new,
+                                        Location::setName,
+                                        locationRepo::save
+                                )
+                        );
+
+                        demand.setSalesSpoc(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Sales SPOC"
+                                        ),
+                                        salesSpocCache,
+                                        salesSpocRepo::findBySalesSpocIgnoreCase,
+                                        SalesSpoc::new,
+                                        SalesSpoc::setSalesSpoc,
+                                        salesSpocRepo::save
+                                )
+                        );
+
+                        demand.setP1FlagDate(
+                                getDateValue(
+                                        ExcelColumnHelper.getCell(
+                                                row,
+                                                headerMap,
+                                                "P1 Flag Date"
+                                        )
+                                )
+                        );
+
+                        demand.setPmo(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "PMO"
+                                        ),
+                                        pmoCache,
+                                        pmoRepo::findByPmoIgnoreCase,
+                                        Pmo::new,
+                                        Pmo::setPmo,
+                                        pmoRepo::save
+                                )
+                        );
+
+                        demand.setProjectManager(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "PM"
+                                        ),
+                                        projectManagerCache,
+                                        projectManagerRepo::findByProjectManagerIgnoreCase,
+                                        ProjectManager::new,
+                                        ProjectManager::setProjectManager,
+                                        projectManagerRepo::save
+                                )
+                        );
+
+                        demand.setHbu(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "HBU"
+                                        ),
+                                        hbuCache,
+                                        hbuRepo::findByHbuIgnoreCase,
+                                        Hbu::new,
+                                        Hbu::setHbu,
+                                        hbuRepo::save
+                                )
+                        );
+
+                        demand.setRrNumber(
+                                getRequiredString(
+                                        row,
+                                        headerMap,
+                                        "RR"
+                                )
+                        );
+
+                        demand.setBand(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Band"
+                                        ),
+                                        bandCache,
+                                        bandRepo::findByBandIgnoreCase,
+                                        Band::new,
+                                        Band::setBand,
+                                        bandRepo::save
+                                )
+                        );
+
+                        demand.setKaratFlag(
+                                getBooleanValue(
+                                        ExcelColumnHelper.getCell(
+                                                row,
+                                                headerMap,
+                                                "KARAT required"
+                                        )
+                                )
+                        );
+
+                        demand.setStatus(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Status"
+                                        ),
+                                        statusCache,
+                                        statusRepo::findByStatusIgnoreCase,
+                                        Status::new,
+                                        Status::setStatus,
+                                        statusRepo::save
+                                )
+                        );
+
+                        demand.setRemark(
+                                getRequiredString(
+                                        row,
+                                        headerMap,
+                                        "Remarks"
+                                )
+                        );
+
+                        // ============================
+                        // BUSINESS FUNCTION
+                        // ============================
+
+                        demand.setBusinessFunction(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Business Function"
+                                        ),
+                                        businessFunctionCache,
+                                        businessFunctionRepo::findByBusinessFunctionIgnoreCase,
+                                        BusinessFunction::new,
+                                        BusinessFunction::setBusinessFunction,
+                                        businessFunctionRepo::save
+                                )
+                        );
+
+
+                        demand.setJobCategory(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Job Category"
+                                        ),
+                                        jobCategoryCache,
+                                        jobCategoryRepo::findByJobCategoryIgnoreCase,
+                                        JobCategory::new,
+                                        JobCategory::setJobCategory,
+                                        jobCategoryRepo::save
+                                )
+                        );
+
+                        demand.setContractType(
+
+                                resolveOrCreate(
+                                        getRequiredString(
+                                                row,
+                                                headerMap,
+                                                "Contract Type"
+                                        ),
+                                        contractTypeCache,
+                                        contractTypeRepo::findByContractTypeIgnoreCase,
+                                        ContractType::new,
+                                        ContractType::setContractType,
+                                        contractTypeRepo::save
+                                )
+                        );
+
+                        demand.setCtoolId(
+                                getLongValue(
+                                        ExcelColumnHelper.getCell(
+                                                row,
+                                                headerMap,
+                                                "Ctool Id"
+                                        )
+                                )
+                        );
+
+                        demands.add(demand);
+
+                    } catch (Exception ex) {
+
+                        errors.add(
+                                sheetName +
+                                        " Row " +
+                                        (row.getRowNum() + 1) +
+                                        " : " +
+                                        ex.getMessage()
+                        );
+                    }
+                }
             }
+
+            if (!demands.isEmpty()) {
+
+                System.out.println(
+                        "Saving demands: "
+                                + demands.size()
+                );
+
+                demandRepository.saveAll(demands);
+
+                demandRepository.flush();
+            }
+
+
+            DemandImportResponse response =
+                    new DemandImportResponse();
+
+            response.setSuccessCount(
+                    demands.size()
+            );
+
+            response.setFailedCount(
+                    errors.size()
+            );
+
+            response.setErrors(errors);
+
+            return response;
 
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse Excel file: " + e.getMessage(), e);
         }
 
-        return demands;
     }
 
     // ─── Cell value utilities ─────────────────────────────────────────────────
@@ -457,15 +770,24 @@ public class ExcelImportHelper {
     }
 
     private Long getLongValue(Cell cell) {
-        if (cell == null) return null;
-        return switch (cell.getCellType()) {
-            case NUMERIC -> (long) cell.getNumericCellValue();
-            case STRING  -> {
-                try { yield Long.parseLong(cell.getStringCellValue().trim()); }
-                catch (NumberFormatException e) { yield null; }
-            }
-            default -> null;
-        };
+
+        if (cell == null) {
+            return null;
+        }
+
+        String value = getStringValue(cell);
+
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String numericPart = value.replaceAll("[^0-9]", "");
+
+        if (numericPart.isEmpty()) {
+            return null;
+        }
+
+        return Long.parseLong(numericPart);
     }
 
     private LocalDate getDateValue(Cell cell) {
@@ -536,5 +858,101 @@ public class ExcelImportHelper {
             if (cell != null && cell.getCellType() != CellType.BLANK) return false;
         }
         return true;
+    }
+
+    private String getRequiredString(
+            Row row,
+            Map<String, Integer> headerMap,
+            String columnName
+    ) {
+
+        return getStringValue(
+                ExcelColumnHelper.getCell(
+                        row,
+                        headerMap,
+                        columnName
+                )
+        );
+    }
+
+    private Lob getOrCreateLob(
+            String lobName,
+            Map<String, Lob> lobCache
+    ) {
+
+        String k = key(lobName);
+
+        if (k == null) {
+            return null;
+        }
+
+        Lob lob = lobCache.get(k);
+
+        if (lob != null) {
+            return lob;
+        }
+
+        lob = lobRepo.findByLob(lobName)
+                .orElse(null);
+
+        if (lob == null) {
+
+            lob = new Lob();
+
+            lob.setLob(lobName);
+
+            lob.setCurrentDemandIdSequence(0);
+
+            lob = lobRepo.save(lob);
+        }
+
+        lobCache.put(k, lob);
+
+        return lob;
+    }
+
+    private SubLob getOrCreateSubLob(
+            String subLobName,
+            Lob lob,
+            Map<String, SubLob> subLobCache
+    ) {
+
+        if (subLobName == null ||
+                subLobName.isBlank()) {
+
+            return null;
+        }
+
+        String k = key(subLobName);
+
+        SubLob subLob =
+                subLobCache.get(k);
+
+        if (subLob != null) {
+
+            return subLob;
+        }
+
+        subLob =
+                subLobRepo
+                        .findBySubLobIgnoreCase(
+                                subLobName
+                        )
+                        .orElse(null);
+
+        if (subLob == null) {
+
+            subLob = new SubLob();
+
+            subLob.setSubLob(subLobName);
+
+            subLob.setLob(lob);
+
+            subLob = subLobRepo.save(subLob);
+        }
+
+        subLobCache.put(k, subLob);
+
+        return subLob;
     }
 }

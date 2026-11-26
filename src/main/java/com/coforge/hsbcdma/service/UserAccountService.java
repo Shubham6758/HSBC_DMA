@@ -1,6 +1,6 @@
 package com.coforge.hsbcdma.service;
 
-import com.coforge.hsbcdma.dto.AuthResponseDTO;
+import com.coforge.hsbcdma.dto.*;
 import com.coforge.hsbcdma.dto.LoginRequestDTO;
 import com.coforge.hsbcdma.dto.LoginResponseDTO;
 import com.coforge.hsbcdma.dto.RegisterRequestDTO;
@@ -15,16 +15,17 @@ import com.coforge.hsbcdma.entity.*;
 import com.coforge.hsbcdma.entity.UserManagementEntities.Action;
 import com.coforge.hsbcdma.entity.UserManagementEntities.ChildModule;
 import com.coforge.hsbcdma.entity.UserManagementEntities.Module;
-import com.coforge.hsbcdma.exception.InvalidCredentialsException;
-import com.coforge.hsbcdma.exception.UserAlreadyExistsException;
-import com.coforge.hsbcdma.exception.UserInactiveException;
+import com.coforge.hsbcdma.exception.*;
 import com.coforge.hsbcdma.mapper.RoleMapper;
 import com.coforge.hsbcdma.mapper.UserMapper;
 import com.coforge.hsbcdma.repository.*;
 import com.coforge.hsbcdma.repository.UserManagementRepositories.ActionRepository;
 import com.coforge.hsbcdma.repository.UserManagementRepositories.ChildModuleRepository;
 import com.coforge.hsbcdma.repository.UserManagementRepositories.ModuleRepository;
+import com.coforge.hsbcdma.service.ProfileServices.ProfileService;
 import com.coforge.hsbcdma.util.JwtUtil;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.transaction.Transactional;
 import org.slf4j.Logger;
@@ -98,17 +99,24 @@ public class UserAccountService {
     @Autowired
     private ActionRepository actionRepository;
 
+    @Autowired
+    private ProfileService profileService;
+
     // Added by Chetan
 
     @Autowired private LocationRepository locationRepository;
     @Autowired private DepartmentRepository departmentRepository;
     @Autowired private SubDepartmentRepository subDepartmentRepository;
 
+
     private static final int TOKEN_EXP_MINUTES =5;
+    private static final int MAX_LOGIN_ATTEMPTS = 5;
+    private static final int LOCK_DURATION_MINUTES = 15;
 
     private static final Logger logger = LoggerFactory.getLogger(UserAccountService.class);
 
     public LoginResponseDTO register(RegisterRequestDTO userRequest) {
+        validateRegisterRequest(userRequest);
         User user = new User();
         user.setUserId(userRequest.getUserId());
         Optional<User> existingUser = repo.findByUserId(userRequest.getUserId());
@@ -129,6 +137,9 @@ public class UserAccountService {
         user.setPhoneNumber(userRequest.getPhoneNumber());
 //        user.setPermissions(userRequest.getPermissions());
 
+
+
+
         user.setName(userRequest.getName());
         CountryCode country = countryCodeRepository.findById(userRequest.getCountryId())
                 .orElseThrow(() -> new RuntimeException("Country not found with id: " + userRequest.getCountryId()));
@@ -145,9 +156,25 @@ public class UserAccountService {
 //        user.setCreatedAt(LocalDateTime.now());
 
         String tempPassword = generateTempPassword();
+//
+//        String encPhone = AESUtil.encrypt(
+//                String.valueOf(userRequest.getPhoneNumber()),
+//                tempPassword
+//        );
+
+//        String encEmail = AESUtil.encrypt(
+//                userRequest.getEmailId(),
+//                tempPassword
+//        );
+
+//        user.setPhoneNumber(Long.valueOf(encPhone));
+//        user.setEmailId(encEmail);
 
         // Saving encrypted temporary password
         user.setTempPassword(Objects.requireNonNull(passwordEncoder.encode(tempPassword)).substring(0,10));
+
+        System.out.println("TempPassword: " + tempPassword);
+        System.out.println(Objects.requireNonNull(passwordEncoder.encode(tempPassword)).substring(0,10));
         user.setFirstLogin(true);
 
 //      Added By chetan
@@ -180,13 +207,12 @@ public class UserAccountService {
     }
 
     public AuthResponseDTO login(LoginRequestDTO loginRequest, HttpServletRequest request) {
-
         logger.info("Login attempt for userId: {}", loginRequest.getUserId());
 
         User user = repo.findByUserId(loginRequest.getUserId())
                 .orElseThrow(() -> {
                     logger.warn("User not found: {}", loginRequest.getUserId());
-                    return new RuntimeException("User not found");
+                    return new InvalidCredentialsException("Invalid Credentials");
                 });
 
         if (!user.isActive()) {
@@ -194,21 +220,19 @@ public class UserAccountService {
         }
 
 
+        // ✅ ACCOUNT LOCK CHECK
+        if (user.getAccountLocked()) {
+            if (isUnlockTimeExpired(user)) {
+                resetFailedAttempts(user);
+                logger.info("User {} unlocked automatically", user.getUserId());
+            } else {
+                throw new InvalidCredentialsException(
+                        "Account locked due to multiple failed attempts. Try again later."
+                );
+            }
+        }
 
-        // 🔒 BLOCK PARALLEL LOGIN
-//        if (user.getSessionId() != null) {
-//            throw new InvalidCredentialsException(
-//                    "User is already logged in from another device");
-//        }
         LocalDateTime now = LocalDateTime.now();
-        // 🔒 BLOCK PARALLEL LOGIN (CORE REQUIREMENT)
-//        if (user.getActiveToken() != null &&
-//                user.getTokenExpiresAt() != null &&
-//                user.getTokenExpiresAt().isAfter(now)) {
-//
-//            throw new InvalidCredentialsException(
-//                    "User is already logged in from another device");
-//        }
 
         // ✅ Handle stale session cleanup
         if (user.getActiveToken() != null && user.getTokenExpiresAt() != null) {
@@ -233,8 +257,10 @@ public class UserAccountService {
             logger.info("First time login detected for userId: {}", user.getUserId());
             if (!passwordEncoder.matches(loginRequest.getPassword(), user.getTempPassword())) {
                 logger.warn("Invalid temp password attempt for userId: {}", user.getUserId());
+                increaseFailedAttempts(user);
                 throw new InvalidCredentialsException("Invalid temp password");
             }
+            resetFailedAttempts(user);
             logger.info("First time login successful, password change required for userId: {}", user.getUserId());
             return new AuthResponseDTO("PASSWORD_CHANGE_REQUIRED");
         }
@@ -251,23 +277,14 @@ public class UserAccountService {
                     )
             );
 
+            // ✅ RESET ATTEMPTS ON SUCCESS
+            resetFailedAttempts(user);
+
             // 2. Get username safely from principal
             UserDetails userDetails = (UserDetails) auth.getPrincipal();
             logger.info("Authentication successful for userId: {}", user.getUserId());
 
-
-            // ✅ Create session
-//            HttpSession session = request.getSession(true);
-//            user.setSessionId(session.getId());
-//            repo.save(user);
-
-
-
-
-
-            // 3. Generate JWT token
-
-// 3. Generate ACCESS token (JWT)
+            // 3. Generate ACCESS token (JWT)
             String accessToken = jwtUtil.generateToken(
                     userDetails.getUsername(),
                     user.getRole().getRole(),
@@ -275,7 +292,7 @@ public class UserAccountService {
             );
 
 
-// 4. Generate REFRESH token
+            // 4. Generate REFRESH token
             String refreshToken = jwtUtil.generateRefreshToken(user.getUserId());
 
 
@@ -285,7 +302,7 @@ public class UserAccountService {
             );
 
 
-// SINGLE-LOGIN ENFORCEMENT
+            // SINGLE-LOGIN ENFORCEMENT
             user.setActiveToken(accessToken);
             user.setTokenExpiresAt(LocalDateTime.now().plusMinutes(5)); // SAME AS JWT EXPIRY
             repo.save(user);
@@ -360,7 +377,7 @@ public class UserAccountService {
 
             logger.info("*********gerroleresponse***{}",roleInfo.toString());
 
-// ✅ RETURN BOTH TOKENS
+            // ✅ RETURN BOTH TOKENS
             return new AuthResponseDTO(
                     user.getUserId(),
                     accessToken,
@@ -373,8 +390,20 @@ public class UserAccountService {
             throw new UserInactiveException("User is inactive. Please contact admin.");
         }
         catch (BadCredentialsException e) {
-            logger.warn("Invalid login attempt for userId: {}", loginRequest.getUserId());
-            throw new InvalidCredentialsException("Invalid username or password");
+
+            logger.warn("Failed login attempt for {}", user.getUserId());
+
+            increaseFailedAttempts(user);
+
+            if (user.getAccountLocked()) {
+                throw new InvalidCredentialsException(
+                        "Account locked due to multiple failed attempts. Try after "
+                                + LOCK_DURATION_MINUTES + " minutes."
+                );
+            }
+
+            throw new InvalidCredentialsException("Invalid credentials");
+
         } catch (Exception e) {
             logger.error("Unexpected error during login for userId: {}", loginRequest.getUserId(), e);
             throw e;
@@ -420,7 +449,21 @@ public class UserAccountService {
         if(!request.getTempPassword().equals(user.getTempPassword())) {
             throw new RuntimeException("Passwords don't match");
         }
-        user.setPassword(passwordEncoder.encode(request.getPassword()));
+
+        String oldPassword = request.getTempPassword();
+        String newPassword = request.getPassword();
+
+        // ✅ decrypt using OLD password
+//        String decryptedPhone = AESUtil.decrypt(String.valueOf(user.getPhoneNumber()), oldPassword);
+//        String decryptedEmail = AESUtil.decrypt(user.getEmailId(), oldPassword);
+
+        // ✅ re-encrypt using NEW password
+//        user.setPhoneNumber(Long.valueOf(AESUtil.encrypt(decryptedPhone, newPassword)));
+//        user.setEmailId(AESUtil.encrypt(decryptedEmail, newPassword));
+
+        // ✅ update password
+        user.setPassword(passwordEncoder.encode(newPassword));
+
         user.setTempPassword(null);
         user.setFirstLogin(false);
 
@@ -690,13 +733,36 @@ public class UserAccountService {
 
     @Transactional
     public void updateUserActiveStatus(String targetUserId, boolean active) {
+
         User target = repo.findByUserId(targetUserId)
-                .orElseThrow(() -> new RuntimeException("User not found: " + targetUserId));
+                .orElseThrow(() ->
+                        new RuntimeException("User not found: " + targetUserId));
 
         String adminUserId = getCurrentAdminUserId();
 
         target.setActive(active);
         target.setUpdatedBy(adminUserId);
+
+        // Force logout when user is deactivated
+        if (!active) {
+
+            // Blacklist current token if present
+            if (target.getActiveToken() != null) {
+
+                long expiry = jwtUtil.getExpirationEpochSeconds(
+                        target.getActiveToken()
+                );
+
+                tokenBlacklistService.blacklistToken(
+                        target.getActiveToken(),
+                        expiry
+                );
+            }
+
+            // Clear active session
+            target.setActiveToken(null);
+            target.setTokenExpiresAt(null);
+        }
 
         repo.save(target);
     }
@@ -764,7 +830,7 @@ public class UserAccountService {
 
     @Transactional
     public UserListItemDTO putUserById(Long id, PutUserRequestDTO dto) {
-
+        validatePutUserRequest(dto);
         User user = repo.findById(id)
                 .orElseThrow(() -> new RuntimeException("User not found with id: " + id));
 
@@ -874,36 +940,230 @@ public class UserAccountService {
         return toUserListItemDTO(full);
     }
 
-
     public Map<String, String> refreshToken(String refreshToken) {
+        try {
 
-        if (refreshToken == null || refreshToken.isBlank()) {
-            throw new RuntimeException("Refresh token missing");
+            String userId = jwtUtil.extractUsername(refreshToken);
+
+            User user = repo.findByUserId(userId)
+                    .orElseThrow(() ->
+                            new UnauthorizedException("Invalid refresh token"));
+
+            if (user.getActiveToken() == null) {
+                throw new UnauthorizedException("Session expired");
+            }
+
+            String newAccessToken = jwtUtil.generateToken(
+                    user.getUserId(),
+                    user.getRole().getRole(),
+                    user.getRole().getModuleChildModule()
+            );
+
+            user.setActiveToken(newAccessToken);
+            user.setTokenExpiresAt(
+                    LocalDateTime.now().plusMinutes(TOKEN_EXP_MINUTES)
+            );
+
+            repo.save(user);
+
+            return Map.of("token", newAccessToken);
+
+        } catch (ExpiredJwtException e) {
+            throw new UnauthorizedException(
+                    "Refresh token expired. Please login again."
+            );
+        } catch (JwtException | IllegalArgumentException e) {
+            throw new BadRequestException(
+                    "Invalid refresh token"
+            );
+        }
+    }
+
+    // helper for locking user if he try to login multiple times with bad credentials
+    private void increaseFailedAttempts(User user) {
+        int attempts = user.getFailedAttempts() + 1;
+        user.setFailedAttempts(attempts);
+
+        if (attempts >= MAX_LOGIN_ATTEMPTS) {
+            user.setAccountLocked(true);
+            user.setLockTime(LocalDateTime.now());
+            logger.warn("User {} locked due to too many failed attempts", user.getUserId());
         }
 
-        String userId = jwtUtil.extractUsername(refreshToken);
-
-        User user = repo.findByUserId(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
-
-        // ✅ session must still exist
-        if (user.getActiveToken() == null) {
-            throw new RuntimeException("Session expired");
-        }
-
-        String newAccessToken = jwtUtil.generateToken(
-                user.getUserId(),
-                user.getRole().getRole(),
-                user.getRole().getModuleChildModule()
-        );
-
-        user.setActiveToken(newAccessToken);
-        user.setTokenExpiresAt(LocalDateTime.now().plusMinutes(TOKEN_EXP_MINUTES));
         repo.save(user);
+    }
 
-        return Map.of("token", newAccessToken);
+    private void resetFailedAttempts(User user) {
+        user.setFailedAttempts(0);
+        user.setAccountLocked(false);
+        user.setLockTime(null);
+        repo.save(user);
+    }
+
+    private boolean isUnlockTimeExpired(User user) {
+        if (user.getLockTime() == null) return true;
+
+        return user.getLockTime()
+                .plusMinutes(LOCK_DURATION_MINUTES)
+                .isBefore(LocalDateTime.now());
     }
 
 
+    // ------------------------------------------------------
+// Input validation for User Management
+// ------------------------------------------------------
+
+    private void validateRegisterRequest(RegisterRequestDTO dto) {
+
+        if (dto == null) {
+            throw new IllegalArgumentException("User request is required");
+        }
+
+        validateUserId(dto.getUserId());
+        validateEmployeeName(dto.getName());
+        validateEmail(dto.getEmailId());
+
+        if (dto.getPhoneNumber() != null) {
+            validatePhoneNumber(dto.getPhoneNumber());
+        }
+    }
+
+    private void validatePutUserRequest(PutUserRequestDTO dto) {
+
+        if (dto == null) {
+            throw new IllegalArgumentException("User update request is required");
+        }
+
+        if (StringUtils.hasText(dto.getUserId())) {
+            validateUserId(dto.getUserId());
+        }
+
+        if (StringUtils.hasText(dto.getName())) {
+            validateEmployeeName(dto.getName());
+        }
+
+        if (StringUtils.hasText(dto.getEmailId())) {
+            validateEmail(dto.getEmailId());
+        }
+
+        if (dto.getPhoneNumber() != null) {
+            validatePhoneNumber(dto.getPhoneNumber());
+        }
+    }
+
+    private void validateUserId(String userId) {
+
+        if (!StringUtils.hasText(userId)) {
+            throw new IllegalArgumentException("User ID is required");
+        }
+
+        String value = userId.trim();
+
+        if (containsUnsafeInput(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in User ID");
+        }
+
+        if (value.length() > 50) {
+            throw new IllegalArgumentException("User ID cannot be more than 50 characters");
+        }
+
+        /*
+         * User ID should be strict.
+         * Allowed examples:
+         * 8473978
+         * SIMRAN01
+         * user_101
+         * EMP-123
+         */
+        if (!value.matches("^[a-zA-Z0-9_-]+$")) {
+            throw new IllegalArgumentException(
+                    "Invalid User ID. Only letters, numbers, _ and - are allowed"
+            );
+        }
+    }
+
+    private void validateEmployeeName(String name) {
+
+        if (!StringUtils.hasText(name)) {
+            throw new IllegalArgumentException("Employee name is required");
+        }
+
+        String value = name.trim();
+
+        if (containsUnsafeInput(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in Employee Name");
+        }
+
+        if (value.length() > 100) {
+            throw new IllegalArgumentException("Employee name cannot be more than 100 characters");
+        }
+
+        /*
+         * Employee name should allow only normal name characters.
+         * Allowed examples:
+         * Simran Kasare
+         * Simran A. Kasare
+         * Simran-Kasare
+         * Simran O'Neil
+         */
+        if (!value.matches("^[a-zA-Z .'-]+$")) {
+            throw new IllegalArgumentException(
+                    "Invalid Employee Name. Only letters, spaces, dot, apostrophe and hyphen are allowed"
+            );
+        }
+    }
+
+    private void validateEmail(String email) {
+
+        if (!StringUtils.hasText(email)) {
+            throw new IllegalArgumentException("Email ID is required");
+        }
+
+        String value = email.trim();
+
+        if (containsUnsafeInput(value)) {
+            throw new IllegalArgumentException("HTML or script tags are not allowed in Email ID");
+        }
+
+        if (value.length() > 150) {
+            throw new IllegalArgumentException("Email ID cannot be more than 150 characters");
+        }
+
+        if (!value.matches("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$")) {
+            throw new IllegalArgumentException("Invalid Email ID format");
+        }
+    }
+
+    private void validatePhoneNumber(Long phoneNumber) {
+
+        if (phoneNumber <= 0) {
+            throw new IllegalArgumentException("Phone number must be positive");
+        }
+
+        if (phoneNumber < 1000000000L || phoneNumber > 9999999999L) {
+            throw new IllegalArgumentException("Phone number must be 10 digits");
+        }
+    }
+
+    private boolean containsUnsafeInput(String value) {
+
+        if (value == null) {
+            return false;
+        }
+
+        String lower = value.toLowerCase(Locale.ROOT);
+
+        return lower.contains("<")
+                || lower.contains(">")
+                || lower.contains("&lt;")
+                || lower.contains("&gt;")
+                || lower.contains("script")
+                || lower.contains("javascript:")
+                || lower.contains("onerror")
+                || lower.contains("onload")
+                || lower.contains("onclick")
+                || lower.contains("onmouseover")
+                || lower.contains("alert(");
+    }
 }
  

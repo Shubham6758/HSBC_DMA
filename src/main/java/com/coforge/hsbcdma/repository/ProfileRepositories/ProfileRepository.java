@@ -20,6 +20,7 @@ public interface ProfileRepository extends JpaRepository<Profile, Long>, JpaSpec
     // New checks
     boolean existsByPhoneNumber(Long phoneNumber);
     boolean existsByPanNumberIgnoreCase(String panNumber);
+    boolean existsByEmailIdIgnoreCase(String emailId);
 
     List<Profile> findByIsActiveTrue();
 
@@ -63,4 +64,21 @@ public interface ProfileRepository extends JpaRepository<Profile, Long>, JpaSpec
     Optional<Profile> findByEmpId(String trim);
 
     Optional<Profile> findByEmpIdAndCandidateNameIgnoreCase(String trim, String trim1);
+
+    @Query("""
+    SELECT COUNT(p)
+    FROM Profile p
+    WHERE LOWER(p.profileStatus.name) = LOWER(:status)
+    AND (:hbuId IS NULL OR p.hbu.id = :hbuId)
+""")
+    long countByStatusAndHbu(@Param("status") String status,
+                             @Param("hbuId") Long hbuId);
+
+    List<Profile> findByTechIrsFileName(String techIrsFileName);
+
+    List<Profile> findByIsDraftTrue();
+
+    Page<Profile> findByIsDraftTrue(Pageable pageable);
+
+    Optional<Profile> findByIdAndIsDraftTrue(Long id);
 }

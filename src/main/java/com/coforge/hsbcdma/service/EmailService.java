@@ -1,5 +1,8 @@
 package com.coforge.hsbcdma.service;
 
+import com.coforge.hsbcdma.dto.UserMananagementDTO.DecryptEmailRequest;
+import com.coforge.hsbcdma.dto.UserMananagementDTO.DecryptEmailResponse;
+import com.coforge.hsbcdma.util.AESUtil;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -44,5 +47,23 @@ public class EmailService {
         );
         mailSender.send(message);
     }
+
+
+
+    public DecryptEmailResponse decryptEmail(DecryptEmailRequest request) {
+
+        try {
+            String decrypted = AESUtil.decrypt(
+                    request.getEncryptedEmail(),
+                    request.getPassword()
+            );
+
+            return new DecryptEmailResponse(decrypted, "Decryption successful");
+
+        } catch (Exception e) {
+            throw new RuntimeException("Invalid password or corrupted data");
+        }
+    }
+
 
 }

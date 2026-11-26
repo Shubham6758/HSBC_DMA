@@ -49,6 +49,7 @@ public final class ProfileTrackerSpecifications {
             boolean needsDemand =
                     f.getDemandPkId() != null ||
                             f.getDemandNumber() != null ||
+                            hasText(f.getDisplayDemandId()) ||
                             hasList(f.getPriorityNames()) ||
                             hasList(f.getSkillClusterNames()) ||
                             hasList(f.getLobNames()) ||
@@ -85,6 +86,129 @@ public final class ProfileTrackerSpecifications {
                 predicates.add(cb.equal(
                         (d != null ? d : root.join("demand")).get("demandId"),
                         f.getDemandNumber()));
+            }
+
+//            if (hasText(f.getDisplayDemandId())) {
+//
+//                String search = f.getDisplayDemandId().trim();
+//
+//                if (search.contains("-")) {
+//
+//                    String[] parts = search.split("-", 2);
+//
+//                    String prefix = parts[0].trim().toLowerCase();
+//
+//                    try {
+//
+//                        Long demandNo = Long.parseLong(parts[1].trim());
+//
+//                        Predicate demandPredicate = cb.equal(
+//                                (d != null ? d : root.join("demand"))
+//                                        .get("demandId"),
+//                                demandNo
+//                        );
+//
+//                        Join<AddDemand, SubLob> subLobJoin =
+//                                (d != null ? d : root.join("demand"))
+//                                        .join("subLob", JoinType.LEFT);
+//
+//                        Join<AddDemand, Lob> lobJoin =
+//                                (d != null ? d : root.join("demand"))
+//                                        .join("lob", JoinType.LEFT);
+//
+//                        Predicate prefixPredicate = cb.or(
+//
+//                                cb.like(
+//                                        cb.lower(subLobJoin.get("subLob")),
+//                                        "%" + prefix + "%"
+//                                ),
+//
+//                                cb.like(
+//                                        cb.lower(lobJoin.get("lob")),
+//                                        "%" + prefix + "%"
+//                                )
+//                        );
+//
+//                        predicates.add(cb.and(demandPredicate, prefixPredicate));
+//
+//                    } catch (NumberFormatException ex) {
+//                        // ignore invalid format
+//                    }
+//
+//                } else {
+//
+//                    try {
+//
+//                        Long demandNo = Long.parseLong(search);
+//
+//                        predicates.add(
+//                                cb.equal(
+//                                        (d != null ? d : root.join("demand"))
+//                                                .get("demandId"),
+//                                        demandNo
+//                                )
+//                        );
+//
+//                    } catch (NumberFormatException ex) {
+//
+//                        Predicate lobPredicate = cb.like(
+//                                cb.lower(
+//                                        (d != null ? d : root.join("demand"))
+//                                                .join("lob", JoinType.LEFT)
+//                                                .get("lob")
+//                                ),
+//                                "%" + search.toLowerCase() + "%"
+//                        );
+//
+//                        Predicate subLobPredicate = cb.like(
+//                                cb.lower(
+//                                        (d != null ? d : root.join("demand"))
+//                                                .join("subLob", JoinType.LEFT)
+//                                                .get("subLob")
+//                                ),
+//                                "%" + search.toLowerCase() + "%"
+//                        );
+//
+//                        predicates.add(
+//                                cb.or(lobPredicate, subLobPredicate)
+//                        );
+//                    }
+//                }
+//            }
+
+            if (hasText(f.getDisplayDemandId())) {
+
+                Join<ProfileTracker, AddDemand> demandJoin =
+                        d != null ? d : root.join("demand", JoinType.INNER);
+
+                String like =
+                        "%" + f.getDisplayDemandId().trim().toLowerCase() + "%";
+
+                Expression<String> prefixExpr =
+                        cb.lower(
+                                cb.coalesce(
+                                        demandJoin.join("subLob", JoinType.LEFT)
+                                                .get("subLob"),
+                                        demandJoin.join("lob", JoinType.LEFT)
+                                                .get("lob")
+                                )
+                        );
+
+                Expression<String> displayDemandIdExpr =
+                        cb.concat(
+                                cb.concat(
+                                        prefixExpr,
+                                        "-"
+                                ),
+                                cb.toString(demandJoin.get("demandId"))
+                        );
+
+                predicates.add(
+                        cb.like(
+                                displayDemandIdExpr,
+                                like
+                        )
+                );
             }
 
             if (f.getProfileId() != null) {

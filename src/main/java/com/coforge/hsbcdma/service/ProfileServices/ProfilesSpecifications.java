@@ -3,15 +3,11 @@ package com.coforge.hsbcdma.service.ProfileServices;
 import com.coforge.hsbcdma.dto.ProfilesDTO.ProfilesFilterRequest;
 import com.coforge.hsbcdma.entity.Profile;
 import jakarta.persistence.criteria.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public final class ProfilesSpecifications {
 
@@ -22,90 +18,111 @@ public final class ProfilesSpecifications {
     private static final String REL_PRIMARY_SKILLS = "primarySkills";
     private static final String REL_SECONDARY_SKILLS = "secondarySkills";
 
-    private static final Logger logger = LoggerFactory.getLogger(ProfilesSpecifications.class);
-
-    /** Combine both ID-based and Name-based filters */
+    // ================== ENTRY ==================
     public static Specification<Profile> build(ProfilesFilterRequest f) {
-        return Specification.where(byIds(f)).and(byNames(f));
+        return Specification
+                .where(byIds(f))
+                .and(byNames(f));
     }
 
-    /** Filters based on scalars, ranges, and IDs (ManyToOne & ManyToMany) */
+    // ================== ID / SCALAR FILTERS ==================
     public static Specification<Profile> byIds(ProfilesFilterRequest f) {
         return (root, query, cb) -> {
-            query.distinct(true); // avoid duplicates due to M:N joins
+            query.distinct(true);
             if (f == null) return cb.conjunction();
 
             List<Predicate> predicates = new ArrayList<>();
-            logger.info("ProfilesSpecifications.byNames -> filter received: {}", f);
-            // ---- Scalars ----
-            if (f.getId() != null) {
-                predicates.add(cb.equal(root.get(ID_FIELD), f.getId()));
-            }
-            if (f.getIsActive() != null) {
+
+            if (f.getId() != null)
+                predicates.add(cb.equal(root.get("id"), f.getId()));
+
+            if (f.getIsActive() != null)
                 predicates.add(cb.equal(root.get("isActive"), f.getIsActive()));
-            }
-            if (hasText(f.getCandidateName())) { // case-insensitive contains
-                String like = "%" + f.getCandidateName().trim().toLowerCase() + "%";
-                predicates.add(cb.like(cb.lower(root.get("candidateName")), like));
-            }
-            if (hasText(f.getEmailId())) { // exact, case-insensitive
-                predicates.add(cb.equal(cb.lower(root.get("emailId")), f.getEmailId().trim().toLowerCase()));
-            }
-            if (hasText(f.getEmpId())) { // exact, case-insensitive
-                predicates.add(cb.equal(cb.lower(root.get("empId")), f.getEmpId().trim().toLowerCase()));
-            }
-            if (hasText(f.getSapId())) { // exact, case-insensitive
-                predicates.add(cb.equal(cb.lower(root.get("sapId")), f.getSapId().trim().toLowerCase()));
-            }
-            if (f.getPhoneNumber() != null) { // exact
+
+            if (hasText(f.getCandidateName()))
+                predicates.add(cb.like(
+                        cb.lower(root.get("candidateName")),
+                        likePattern(f.getCandidateName())
+                ));
+
+            if (hasText(f.getEmailId()))
+                predicates.add(cb.equal(
+                        cb.lower(root.get("emailId")),
+                        f.getEmailId().trim().toLowerCase()
+                ));
+
+            if (hasText(f.getEmpId()))
+                predicates.add(cb.equal(
+                        cb.lower(root.get("empId")),
+                        f.getEmpId().trim().toLowerCase()
+                ));
+
+            if (hasText(f.getSapId()))
+                predicates.add(cb.equal(
+                        cb.lower(root.get("sapId")),
+                        f.getSapId().trim().toLowerCase()
+                ));
+
+            if (f.getPhoneNumber() != null)
                 predicates.add(cb.equal(root.get("phoneNumber"), f.getPhoneNumber()));
-            }
 
-            // ---- Experience (min/max or "a-b") ----
-            addExperiencePredicates(predicates, cb, root, f);
+            // ---- Experience ----
+            addExperience(predicates, cb, root, f);
 
-            // ---- ManyToOne by ID ----
+            // ---- ManyToOne IDs ----
             addEqId(predicates, cb, root, "skillCluster", f.getSkillClusterId());
             addEqId(predicates, cb, root, "location", f.getLocationId());
             addEqId(predicates, cb, root, "hbu", f.getHbuId());
             addEqId(predicates, cb, root, "externalInternal", f.getExternalInternalId());
 
-            // ---- ManyToMany by ID (ANY) ----
+            // ---- ManyToMany IDs ----
             if (hasLongList(f.getPrimarySkillIds())) {
                 Join<Object, Object> j = root.join(REL_PRIMARY_SKILLS, JoinType.INNER);
-                predicates.add(j.get(ID_FIELD).in(f.getPrimarySkillIds()));
+                predicates.add(j.get("id").in(f.getPrimarySkillIds()));
             }
+
             if (hasLongList(f.getSecondarySkillIds())) {
                 Join<Object, Object> j = root.join(REL_SECONDARY_SKILLS, JoinType.INNER);
-                predicates.add(j.get(ID_FIELD).in(f.getSecondarySkillIds()));
+                predicates.add(j.get("id").in(f.getSecondarySkillIds()));
             }
 
-            addEqId(predicates, cb, root, "origin", f.getOriginId());
-            addEqId(predicates, cb, root, "karatStatus", f.getKaratStatusId());
-            addEqId(predicates, cb, root, "source", f.getSourceId());
-            addEqId(predicates, cb, root, "overallStatusRdg", f.getOverallStatusRdgId());
+            // ---- Ageing / Billing ----
+            if (f.getMinAgeing() != null)
+                predicates.add(cb.ge(root.get("ageing"), f.getMinAgeing()));
 
-            if (f.getMinAgeing() != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("ageing"), f.getMinAgeing()));
-            }
-            if (f.getMaxAgeing() != null) {
-                predicates.add(cb.lessThanOrEqualTo(root.get("ageing"), f.getMaxAgeing()));
-            }
+            if (f.getMaxAgeing() != null)
+                predicates.add(cb.le(root.get("ageing"), f.getMaxAgeing()));
 
-            if (f.getMinBillingRate() != null) {
-                predicates.add(cb.greaterThanOrEqualTo(
-                        root.get("minBillingRate"), f.getMinBillingRate()));
-            }
-            if (f.getMaxBillingRate() != null) {
-                predicates.add(cb.lessThanOrEqualTo(
-                        root.get("minBillingRate"), f.getMaxBillingRate()));
-            }
+            if (f.getMinBillingRate() != null)
+                predicates.add(cb.ge(root.get("minBillingRate"), f.getMinBillingRate()));
 
-            // ---- TA exact matches ----
-            if (hasText(f.getPanNumber())) {
-                predicates.add(cb.equal(
-                        cb.lower(root.get("panNumber")),
-                        f.getPanNumber().trim().toLowerCase()
+            if (f.getMaxBillingRate() != null)
+                predicates.add(cb.le(root.get("minBillingRate"), f.getMaxBillingRate()));
+
+            // ✅ TEXT FIELDS
+            addLike(predicates, cb, root.get("karatReadiness"), f.getKaratReadiness());
+            addLike(predicates, cb, root.get("lobShared"), f.getLobShared());
+            addLike(predicates, cb, root.get("practice"), f.getPractice());
+//            addLike(predicates, cb, root.get("band"), f.getBand());
+            addLike(predicates, cb, root.get("ageingRange"), f.getAgeingRange());
+            addLike(predicates, cb, root.get("codes"), f.getCodes());
+            addLike(predicates, cb, root.get("codeType"), f.getCodeType());
+
+            //karat
+            addEqId(predicates, cb, root, "persona", f.getPersonaId());
+            addEqId(predicates, cb, root, "prepStatus", f.getPrepStatusId());
+            addEqId(predicates, cb, root, "coderpadResult1", f.getCoderpadResult1Id());
+            addEqId(predicates, cb, root, "coderpadResult2", f.getCoderpadResult2Id());
+            addEqId(predicates, cb, root, "karatReadyStatus", f.getKaratReadyStatusId());
+            addEqId(predicates, cb, root, "karatTestResult", f.getKaratTestResultId());
+
+            if (f.getMinKaratAgeing() != null) {
+                predicates.add(cb.ge(
+                        cb.function("DATEDIFF", Integer.class,
+                                root.get("karatTestDate"),
+                                root.get("karatReadyYesDate")
+                        ),
+                        f.getMinKaratAgeing()
                 ));
             }
 
@@ -116,116 +133,178 @@ public final class ProfilesSpecifications {
                 ));
             }
 
-            if (f.getNegotiableNpLwd() != null) {
-                predicates.add(cb.equal(
-                        root.get("negotiableNpLwd"),
-                        f.getNegotiableNpLwd()
-                ));
+            addLike(predicates, cb, root.get("negotiableNpLwd"), f.getNegotiableNpLwd());
+
+            // ---- Mentor Buddy ----
+            addLike(predicates, cb, root.get("mentorBuddy"), f.getMentorBuddy());
+
+            // ---- Start Date ----
+            if (f.getStartDate() != null) {
+                predicates.add(
+                        cb.equal(
+                                root.get("startDate"),
+                                f.getStartDate()
+                        )
+                );
+            }
+
+            // ---- Planned End Date ----
+            if (f.getPlannedEndDate() != null) {
+                predicates.add(
+                        cb.equal(
+                                root.get("plannedEndDate"),
+                                f.getPlannedEndDate()
+                        )
+                );
+            }
+
+            // ---- Karat Test Date ----
+            if (f.getKaratTestDate() != null) {
+                predicates.add(
+                        cb.equal(
+                                root.get("karatTestDate"),
+                                f.getKaratTestDate()
+                        )
+                );
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 
-    /** Filters based on ManyToOne & ManyToMany names (equals/in, case-insensitive) */
+    // ================== NAME‑BASED (DROPDOWN) ==================
     public static Specification<Profile> byNames(ProfilesFilterRequest f) {
         return (root, query, cb) -> {
             query.distinct(true);
             if (f == null) return cb.conjunction();
 
             List<Predicate> predicates = new ArrayList<>();
-            logger.info("ProfilesSpecifications.byNames -> filter received: {}", f);
-            // ---- ManyToOne by NAME (equals-ignore-case on "name") ----
-            addLikeIgnoreCase(predicates, cb, root, "skillCluster","skillCluster",f.getSkillClusterName());
-            addLikeIgnoreCase(predicates, cb, root, "location", "name",f.getLocationName());
-            addLikeIgnoreCase(predicates, cb, root, "hbu", "hbu",f.getHbuName());
-            addLikeIgnoreCase(predicates, cb, root, "externalInternal","externalInternal", f.getExternalInternalName());
 
-            // ---- ManyToMany by NAME (ANY, case-insensitive) ----
+            // ---- ManyToOne dropdowns (MULTI ✅) ----
+            addLikeAnyIgnoreCase(predicates, cb, root, "skillCluster", "skillCluster", f.getSkillClusterNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "location", "name", f.getLocationNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "hbu", "hbu", f.getHbuNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "externalInternal", "externalInternal", f.getExternalInternalNames());
+            addLikeAnyIgnoreCase(predicates,cb,root,"profileStatus","name",f.getProfileStatusNames());
+            // ---- ManyToMany dropdowns ----
             if (hasTextList(f.getPrimarySkillNames())) {
-                Join<Object, Object> j = root.join("primarySkills", JoinType.INNER);
+                Join<Object, Object> j = root.join(REL_PRIMARY_SKILLS, JoinType.INNER);
                 predicates.add(likeAnyIgnoreCase(cb, j.get("primarySkills"), f.getPrimarySkillNames()));
             }
+
             if (hasTextList(f.getSecondarySkillNames())) {
                 Join<Object, Object> j = root.join(REL_SECONDARY_SKILLS, JoinType.INNER);
-                predicates.add(likeAnyIgnoreCase(cb, j.get(REL_SECONDARY_SKILLS), f.getSecondarySkillNames()));
+                predicates.add(likeAnyIgnoreCase(cb, j.get("secondarySkills"), f.getSecondarySkillNames()));
             }
 
-            // ---------- New Masters (NAME-based search) ----------
-            addLikeIgnoreCase(
-                    predicates, cb, root,
-                    "origin", "name",
-                    f.getOriginName()
-            );
+            // ---- RDG masters dropdowns ----
+            addLikeAnyIgnoreCase(predicates, cb, root, "origin", "name", f.getOriginNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "karatStatus", "name", f.getKaratStatusNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "source", "name", f.getSourceNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "overallStatusRdg", "name", f.getOverallStatusRdgNames());
 
-            addLikeIgnoreCase(
-                    predicates, cb, root,
-                    "karatStatus", "name",
-                    f.getKaratStatusName()
-            );
+            // ---- Text filters ----
+            addLike(predicates, cb, root.get("recruiter"), f.getRecruiter());
+            addLike(predicates, cb, root.get("currentLocation"), f.getCurrentLocation());
+            addLike(predicates, cb, root.get("officialNP"), f.getOfficialNP());
 
-            addLikeIgnoreCase(
-                    predicates, cb, root,
-                    "source", "name",
-                    f.getSourceName()
-            );
+            //karat
 
-            addLikeIgnoreCase(
-                    predicates, cb, root,
-                    "overallStatusRdg", "name",
-                    f.getOverallStatusRdgName()
-            );
+            addLikeAnyIgnoreCase(predicates, cb, root, "persona", "name", f.getPersonaNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "prepStatus", "name", f.getPrepStatusNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "coderpadResult1", "name", f.getCoderpadResult1Names());
+            addLikeAnyIgnoreCase(predicates, cb, root, "coderpadResult2", "name", f.getCoderpadResult2Names());
+            addLikeAnyIgnoreCase(predicates, cb, root, "karatReadyStatus", "name", f.getKaratReadyStatusNames());
+            addLikeAnyIgnoreCase(predicates, cb, root, "karatTestResult", "name", f.getKaratTestResultNames());
 
-            if (hasText(f.getRecruiter())) {
-                predicates.add(cb.like(
-                        cb.lower(root.get("recruiter")),
-                        "%" + f.getRecruiter().trim().toLowerCase() + "%"
+            if (f.getMinKaratAgeing() != null) {
+                predicates.add(cb.ge(
+                        cb.function("DATEDIFF", Integer.class,
+                                root.get("karatTestDate"),
+                                root.get("karatReadyYesDate")
+                        ),
+                        f.getMinKaratAgeing()
                 ));
             }
 
-            if (hasText(f.getCurrentLocation())) {
-                predicates.add(cb.like(
-                        cb.lower(root.get("currentLocation")),
-                        "%" + f.getCurrentLocation().trim().toLowerCase() + "%"
+            if (hasTextList(f.getBand())) {
+                predicates.add(
+                        likeAnyIgnoreCase(cb, root.get("band"), f.getBand())
+                );
+            }
+
+            if (f.getDateOfSubmission() != null) {
+                predicates.add(cb.equal(
+                        root.get("dateOfSubmission"),
+                        f.getDateOfSubmission()
                 ));
             }
 
-            if (hasText(f.getOfficialNP())) {
-                predicates.add(cb.like(
-                        cb.lower(root.get("officialNP")),
-                        "%" + f.getOfficialNP().trim().toLowerCase() + "%"
-                ));
-            }
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
     }
 
-    // ================= Helpers =================
-    private static void addExperiencePredicates(List<Predicate> predicates, CriteriaBuilder cb, Root<?> root, ProfilesFilterRequest f) {
-        if (f.getMinExperience() != null) {
-            predicates.add(cb.greaterThanOrEqualTo(root.get("experience"), f.getMinExperience()));
-        }
-        if (f.getMaxExperience() != null) {
-            predicates.add(cb.lessThanOrEqualTo(root.get("experience"), f.getMaxExperience()));
-        }
-        if (hasText(f.getExperienceRange())) {
-            float[] range = parseRange(f.getExperienceRange().trim());
-            if (range != null) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("experience"), range[0]));
-                predicates.add(cb.lessThanOrEqualTo(root.get("experience"), range[1]));
-            }
-        }
+    // ================== HELPERS ==================
+
+    private static void addExperience(List<Predicate> p, CriteriaBuilder cb, Root<?> r, ProfilesFilterRequest f) {
+        if (f.getMinExperience() != null)
+            p.add(cb.ge(r.get("experience"), f.getMinExperience()));
+        if (f.getMaxExperience() != null)
+            p.add(cb.le(r.get("experience"), f.getMaxExperience()));
     }
 
-    private static float[] parseRange(String s) {
-        // Accepts "5-7", "5.0-7.5" with optional spaces
-        Pattern p = Pattern.compile("\\s*([0-9]+(?:\\.[0-9]+)?)\\s*-\\s*([0-9]+(?:\\.[0-9]+)?)\\s*");
-        Matcher m = p.matcher(s);
-        if (!m.matches()) return null;
-        float a = Float.parseFloat(m.group(1));
-        float b = Float.parseFloat(m.group(2));
-        return new float[]{Math.min(a, b), Math.max(a, b)};
+    private static void addEqId(List<Predicate> p, CriteriaBuilder cb, Root<?> r, String join, Long id) {
+        if (id != null)
+            p.add(cb.equal(r.get(join).get("id"), id));
+    }
+
+    private static void addLike(List<Predicate> p, CriteriaBuilder cb, Path<String> field, String val) {
+        if (hasText(val))
+            p.add(cb.like(cb.lower(field), likePattern(val)));
+    }
+
+    /**
+     * ✅ MULTI‑SELECT for column dropdown
+     * OR inside column, AND outside
+     */
+    private static void addLikeAnyIgnoreCase(
+            List<Predicate> p,
+            CriteriaBuilder cb,
+            Root<Profile> root,
+            String relation,
+            String field,
+            List<String> values
+    ) {
+        if (!hasTextList(values)) return;
+
+        List<Predicate> likes = new ArrayList<>();
+        for (String v : values) {
+            likes.add(cb.like(
+                    cb.lower(root.get(relation).get(field)),
+                    likePattern(v)
+            ));
+        }
+        p.add(cb.or(likes.toArray(new Predicate[0])));
+    }
+
+    private static Predicate likeAnyIgnoreCase(
+            CriteriaBuilder cb,
+            Path<String> field,
+            List<String> values
+    ) {
+        List<Predicate> likes = new ArrayList<>();
+        for (String v : values) {
+            if (hasText(v))
+                likes.add(cb.like(cb.lower(field), likePattern(v)));
+        }
+        return likes.isEmpty()
+                ? cb.conjunction()
+                : cb.or(likes.toArray(new Predicate[0]));
+    }
+
+    private static String likePattern(String s) {
+        return "%" + s.trim().toLowerCase() + "%";
     }
 
     private static boolean hasText(String s) {
@@ -233,88 +312,10 @@ public final class ProfilesSpecifications {
     }
 
     private static boolean hasTextList(List<String> list) {
-        if (list == null || list.isEmpty()) return false;
-        return list.stream().anyMatch(ProfilesSpecifications::hasText);
+        return list != null && list.stream().anyMatch(ProfilesSpecifications::hasText);
     }
 
     private static boolean hasLongList(List<Long> list) {
-        return list != null && !list.isEmpty() && list.stream().anyMatch(Objects::nonNull);
+        return list != null && list.stream().anyMatch(Objects::nonNull);
     }
-
-    /** equals-ignore-case on ManyToOne's "name" field */
-//    private static void addEqIgnoreCase(List<Predicate> p, CriteriaBuilder cb, Root<?> root,
-//                                        String joinAttr, String value) {
-//        if (!hasText(value)) return;
-//        p.add(cb.equal(cb.lower(root.get(joinAttr).get(NAME_FIELD)), value.trim().toLowerCase()));
-//    }
-
-    private static void addEqIgnoreCase(List<Predicate> p, CriteriaBuilder cb, Root<?> root,
-                                        String joinAttr, String field, String value) {
-        if (!hasText(value)) return;
-        p.add(cb.equal(cb.lower(root.get(joinAttr).get(field)), value.trim().toLowerCase()));
-    }
-
-    /** IN (lowercase) for names list */
-    private static Predicate inIgnoreCase(CriteriaBuilder cb, Path<String> field, List<String> values) {
-        CriteriaBuilder.In<String> in = cb.in(cb.lower(field));
-        for (String v : values) {
-            if (hasText(v)) in.value(v.trim().toLowerCase());
-        }
-        return in;
-    }
-
-    /** root.get(joinAttr).get("id") = value */
-    private static void addEqId(List<Predicate> p, CriteriaBuilder cb, Root<?> root,
-                                String joinAttr, Long idValue) {
-        if (idValue == null) return;
-        p.add(cb.equal(root.get(joinAttr).get(ID_FIELD), idValue));
-    }
-
-
-
-    private static String likePattern(String s) {
-        return "%" + s.trim().toLowerCase() + "%";
-    }
-
-    /**
-     * ManyToOne partial match: root.get(relation).get(field) LIKE %value% (ignore-case)
-     */
-    private static void addLikeIgnoreCase(List<Predicate> predicates,
-                                          CriteriaBuilder cb,
-                                          Root<Profile> root,
-                                          String relation,
-                                          String field,
-                                          String value) {
-        if (!hasText(value)) return;
-
-        Path<String> p = root.get(relation).get(field);
-        predicates.add(cb.like(cb.lower(p), likePattern(value)));
-    }
-
-    /**
-     * ManyToMany partial match for list: OR( field LIKE %v1%, field LIKE %v2% ...)
-     */
-    private static Predicate likeAnyIgnoreCase(CriteriaBuilder cb,
-                                               Path<String> field,
-                                               List<String> values) {
-
-        List<String> cleaned = values == null ? List.of() :
-                values.stream()
-                        .filter(Objects::nonNull)
-                        .map(String::trim)
-                        .filter(s -> !s.isEmpty())
-                        .toList();
-
-        if (cleaned.isEmpty()) {
-            return cb.conjunction();
-        }
-
-        List<Predicate> likes = new ArrayList<>();
-        for (String v : cleaned) {
-            likes.add(cb.like(cb.lower(field), likePattern(v)));
-        }
-
-        return cb.or(likes.toArray(new Predicate[0]));
-    }
-
 }

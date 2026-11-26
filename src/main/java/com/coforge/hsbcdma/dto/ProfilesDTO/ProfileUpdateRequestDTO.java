@@ -33,6 +33,14 @@ public class ProfileUpdateRequestDTO {
     private Set<Long> primarySkillsIds;
     private Set<Long> secondarySkillsIds;
 
+
+    private LocalDate l1InterviewDate;
+    private String currentLocation;
+    private String officialNP;
+    private String negotiableNpLwd;
+    private String recruiter;
+
+
     private Long originId;
     private Long karatStatusId;
     private Long sourceId;
@@ -53,4 +61,18 @@ public class ProfileUpdateRequestDTO {
     private String codeType;
     private Double minBillingRate;
     private String projectCode;
+
+    //Karat
+
+    private Long personaId;
+    private String mentorBuddy;
+    private Long prepStatusId;
+    private LocalDate startDate;
+    private LocalDate plannedEndDate;
+    private Long coderpadResult1Id;
+    private Long coderpadResult2Id;
+    private Long karatReadyStatusId;
+    private LocalDate karatTestDate;
+    private Long karatTestResultId;
+
 }

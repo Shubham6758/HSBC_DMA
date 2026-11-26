@@ -10,4 +10,8 @@ public interface LobRepository extends JpaRepository<Lob,Long> {
     Optional<Lob> findByLob(String lob);
 
     Optional<Lob> findByNameIgnoreCase(String trim);
+
+    boolean existsByLobIgnoreCase(String name);
+
+    Optional<Object> findByLobIgnoreCase(String parentName);
 }

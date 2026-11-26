@@ -12,9 +12,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.security.Key;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * This class manages JWT token generation, validation and expiration
@@ -28,18 +26,18 @@ public class JwtUtil {
     private String secret;
 
     // ------------------ Generate Token ------------------
-    public String generateToken(String username, String roleName, List<ModuleChildModuleDTO> modules) {
+    public String generateToken(String username, String roleName, List<ModuleChildModuleDTO> modules)  {
 
-        Map<String, Object> claims = new HashMap<>();
-        claims.put("role", roleName);
-        claims.put("modules", modules);
+//        Map<String, Object> claims = new HashMap<>();
+//        claims.put("role", roleName);
+//        claims.put("modules", modules);
 //        claims.put("name",name);
 
         return Jwts.builder()
                 .subject(username)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 5))
-                .claims(claims)                // e.g., ["ADMIN", "USER"]
+//                .claims(claims)                // e.g., ["ADMIN", "USER"]
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -65,7 +63,7 @@ public class JwtUtil {
         return Jwts.builder()
                 .subject(userId)
                 .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24 * 7))
+                .expiration(new Date(System.currentTimeMillis() + 1000L * 60 * 60 * 24))
                 .signWith(getSigningKey())
                 .compact();
     }
@@ -74,7 +72,8 @@ public class JwtUtil {
     // ------------------ Validate Token ------------------
     public boolean validateToken(String token, UserDetails userDetails) {
         String username = extractUsername(token);
-        return username.equals(userDetails.getUsername());
+        return username.equals(userDetails.getUsername())
+                && !isTokenExpired(token);
     }
 
     private Key getSigningKey() {
@@ -85,6 +84,12 @@ public class JwtUtil {
     // Extract expiration as epoch seconds (for logout blacklist)
     public long getExpirationEpochSeconds(String token) {
         return getClaims(token).getExpiration().toInstant().getEpochSecond();
+    }
+
+    public boolean isTokenExpired(String token) {
+        return getClaims(token)
+                .getExpiration()
+                .before(new Date());
     }
 
 }

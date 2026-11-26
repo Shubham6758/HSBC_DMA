@@ -18,7 +18,13 @@ public class CorsConfig {
 
         // ✅ VERY IMPORTANT: match your frontend exactly
         config.setAllowedOrigins(List.of(
-                "http://hsbcdma-frontend.s3-website.eu-north-1.amazonaws.com"
+                "http://hsbcdma-frontend.s3-website.eu-north-1.amazonaws.com",
+                "https://dpjkb3drfslw5.cloudfront.net",
+                "https://d7x8fqbqn42po.cloudfront.net/",
+                "https://dma.coforge.com",
+                "http://localhost:5173"
+
+
         ));
 
         // ✅ Browser preflight requires OPTIONS
@@ -35,7 +41,7 @@ public class CorsConfig {
         config.setAllowedHeaders(List.of("*"));
 
         // ✅ JWT-based APIs → no cookies
-        config.setAllowCredentials(false);
+        config.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source =
                 new UrlBasedCorsConfigurationSource();

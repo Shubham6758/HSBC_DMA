@@ -6,6 +6,7 @@ import com.coforge.hsbcdma.entity.Location;
 import com.coforge.hsbcdma.entity.dropdownEntities.*;
 import com.coforge.hsbcdma.repository.LocationRepository;
 import com.coforge.hsbcdma.repository.dropdownRepository.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,6 +15,7 @@ import java.util.List;
 import java.util.function.Function;
 
 @Service
+@RequiredArgsConstructor
 public class AddDemandDropdownOptionsService {
 
     private final LobRepository lobRepository;
@@ -43,56 +45,10 @@ public class AddDemandDropdownOptionsService {
     private final PodRepository podRepository;
     private final BandRepository bandRepository;
     private final PriorityRepository priorityRepository;
+    private final BusinessFunctionRepository businessFunctionRepository;
+    private final JobCategoryRepository jobCategoryRepository;
+    private final ContractTypeRepository contractTypeRepository;
 
-    public AddDemandDropdownOptionsService(
-            LobRepository lobRepository,
-            SubLobRepository subLobRepository,
-            SkillClusterRepository skillClusterRepository,
-            PrimarySkillsRepository primarySkillsRepository,
-            SecondarySkillsRepository secondarySkillsRepository,
-            HiringManagerRepository hiringManagerRepository,
-            SalesSpocRepository salesSpocRepository,
-            DeliveryManagerRepository deliveryManagerRepository,
-            PmoRepository pmoRepository,
-            PmoSpocRepository pmoSpocRepository,
-            DemandTypeRepository demandTypeRepository,
-            StatusRepository statusRepository,
-            DemandTimeLineRepository demandTimeLineRepository,
-            ExternalInternalRepository externalInternalRepository,
-            LocationRepository locationRepository,
-
-            // ✅ New
-            HbuRepository hbuRepository,
-            HbuSpocRepository hbuSpocRepository,
-            ProjectManagerRepository projectManagerRepository,
-            PodRepository podRepository,
-            BandRepository bandRepository,
-            PriorityRepository priorityRepository
-    ) {
-        this.lobRepository = lobRepository;
-        this.subLobRepository = subLobRepository;
-        this.skillClusterRepository = skillClusterRepository;
-        this.primarySkillsRepository = primarySkillsRepository;
-        this.secondarySkillsRepository = secondarySkillsRepository;
-        this.hiringManagerRepository = hiringManagerRepository;
-        this.salesSpocRepository = salesSpocRepository;
-        this.deliveryManagerRepository = deliveryManagerRepository;
-        this.pmoRepository = pmoRepository;
-        this.pmoSpocRepository = pmoSpocRepository;
-        this.demandTypeRepository = demandTypeRepository;
-        this.statusRepository = statusRepository;
-        this.demandTimeLineRepository = demandTimeLineRepository;
-        this.externalInternalRepository = externalInternalRepository;
-        this.locationRepository = locationRepository;
-
-        // ✅ New
-        this.hbuRepository = hbuRepository;
-        this.hbuSpocRepository = hbuSpocRepository;
-        this.projectManagerRepository = projectManagerRepository;
-        this.podRepository = podRepository;
-        this.bandRepository = bandRepository;
-        this.priorityRepository = priorityRepository;
-    }
 
     private <T> List<OptionDTO> toOptions(
             List<T> items,
@@ -175,7 +131,27 @@ public class AddDemandDropdownOptionsService {
         dto.setPodList(toOptions(podRepository.findAll(), Pod::getId, Pod::getPod));
         dto.setBandList(toOptions(bandRepository.findAll(), Band::getId, Band::getBand));
         dto.setPriorityList(toOptions(priorityRepository.findAll(), Priority::getId, Priority::getPriority));
-
+        dto.setBusinessFunctionList(
+                toOptions(
+                        businessFunctionRepository.findAll(),
+                        BusinessFunction::getId,
+                        BusinessFunction::getBusinessFunction
+                )
+        );
+        dto.setJobCategoryList(
+                toOptions(
+                        jobCategoryRepository.findAll(),
+                        JobCategory::getId,
+                        JobCategory::getJobCategory
+                )
+        );
+        dto.setContractTypeList(
+                toOptions(
+                        contractTypeRepository.findAll(),
+                        ContractType::getId,
+                        ContractType::getContractType
+                )
+        );
         return dto;
     }
 }

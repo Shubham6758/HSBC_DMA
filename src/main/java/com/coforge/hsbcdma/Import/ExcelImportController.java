@@ -17,12 +17,14 @@ public class ExcelImportController {
     private final ExcelImportService excelImportService;
 
     @PostMapping("/import/demands")
-    public ResponseEntity<String> importDemands(@RequestParam("file") MultipartFile file) {
-        if (file.isEmpty()) {
-            return ResponseEntity.badRequest().body("File is empty.");
-        }
-        int count = excelImportService.importDemands(file);
-        return ResponseEntity.ok("Successfully imported " + count + " demand(s).");
+    public ResponseEntity<DemandImportResponse>
+    importDemands(
+            @RequestParam("file")
+            MultipartFile file) {
+
+        return ResponseEntity.ok(
+                excelImportService.importDemands(file)
+        );
     }
 }
 

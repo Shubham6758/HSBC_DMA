@@ -10,6 +10,7 @@ import com.coforge.hsbcdma.service.DropdownDataCacheService;
 import com.coforge.hsbcdma.service.ExcelDataImportService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
+import org.apache.coyote.BadRequestException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -102,7 +103,7 @@ public class AddNewDemandController extends BaseController{
     )
     public ResponseEntity<?> step2Form(
             @RequestPart("files") List<MultipartFile> files,
-             @RequestPart("data") AddDemandRequestDTO addNewDemandDTO
+            @RequestPart("data") AddDemandRequestDTO addNewDemandDTO
     ) throws IOException {
 
         logger.info("****** Inside step2Form method of AddNewDemandController.");
@@ -175,6 +176,14 @@ public class AddNewDemandController extends BaseController{
         return success(getAllDemandsResponse);
     }
 
+    @GetMapping("/rr-flagged-demands")
+    public ResponseEntity<?> getRrFlaggedDemands(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        return success(addNewDemandService1.getRrFlaggedDemands(page, size));
+    }
+
     @PostMapping(
             value = "/search",
             consumes = MediaType.APPLICATION_JSON_VALUE,
@@ -214,4 +223,24 @@ public class AddNewDemandController extends BaseController{
     public ResponseEntity<AddDemandDropdownOptionsDTO> getDropdownOptions() {
         return ResponseEntity.ok(optionsService.getAllAsOptions());
     }
+
+    @PatchMapping("/demands/{id}/raise-rr-flag")
+    public ResponseEntity<?> raiseRrFlag(
+            @PathVariable Long id
+    ) {
+        addNewDemandService.raiseRrFlag(id);
+
+        return success("RR flag raised successfully");
+    }
+
+
+    @PatchMapping("/demands/{id}/unraise-rr-flag")
+    public ResponseEntity<?> unraiseRrFlag(
+            @PathVariable Long id
+    ) throws BadRequestException {
+        addNewDemandService.unraiseRrFlag(id);
+
+        return success("RR flag removed successfully");
+    }
+
 }

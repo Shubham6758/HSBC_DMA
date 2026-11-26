@@ -22,4 +22,5 @@ public class ProfileSharedResponseDTO {
     private RefDTO profileTrackerStatus;
     private RefDTO evaluationStatus;
     private LocalDateTime createdAt;
+    private RefDTO skillCluster;
 }

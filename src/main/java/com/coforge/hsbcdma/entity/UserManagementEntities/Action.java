@@ -31,4 +31,7 @@ public class Action extends BaseEntity {
 
     @Column(name = "name", nullable = false, length = 50)
     private String action;
+
+    @Column(name = "is_active", nullable = false)
+    private boolean active = true;
 }

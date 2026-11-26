@@ -29,7 +29,8 @@ public class GetAllDemandsResponse {
 //        return lobVal.isBlank() ? String.valueOf(demandId) : lobVal + "-" + demandId;
 //    }
 
-    private Long rrNumber;
+    private String rrNumber;
+    private Boolean rrFlag;
     private String fileName;
 
     // Other scalar fields
@@ -65,6 +66,11 @@ public class GetAllDemandsResponse {
     private RefDTO projectManager;
     private Boolean karatFlag;
     private Boolean isSubcon;
+    private Long p1Age;
+    private RefDTO businessFunction;
+    private RefDTO jobCategory;
+    private RefDTO contractType;
+    private Long ctoolId;
 
     public void computeDisplayDemandId() {
         String lobVal = (lob != null && lob.getName() != null) ? lob.getName() : "";

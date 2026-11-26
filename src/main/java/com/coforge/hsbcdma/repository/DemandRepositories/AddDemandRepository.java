@@ -22,34 +22,44 @@ public interface AddDemandRepository extends JpaRepository<AddDemand, Long> {
 
     boolean existsByDemandId(Long demandId);
 
-    @EntityGraph(attributePaths = {
-            "hbu", "hbuSpoc",
-            "band", "priority", "lob",
-            "demandType", "demandTimeline",
-            "externalInternal", "status", "pod",
-            "pmo", "pmoSpoc", "salesSpoc",
-            "hiringManager", "deliveryManager",
-            "skillCluster","primarySkills","secondarySkills","demandLocations","projectManager","profileTrackers.profile"
-    })
-    @Query("select d from AddDemand d")
+    @Query("""
+    SELECT d
+    FROM AddDemand d
+    ORDER BY
+        CASE
+            WHEN LOWER(d.status.status) = 'open' THEN 1
+            WHEN LOWER(d.status.status) = 'profile shared' THEN 2
+            WHEN LOWER(d.status.status) = 'delayed demand - profile not available' THEN 3
+            WHEN LOWER(d.status.status) = 'candidate shortlisted' THEN 4
+            WHEN LOWER(d.status.status) = 'selected' THEN 5
+            WHEN LOWER(d.status.status) = 'on hold' THEN 6
+            ELSE 999
+        END,
+        d.createdAt DESC
+""")
     Page<AddDemand> findAllWithRefs(Pageable pageable);
 
 
-
-    @EntityGraph(attributePaths = {
-            "hbu", "lob", "band", "priority", "demandType", "demandTimeline",
-            "externalInternal", "status", "pod", "pmo", "pmoSpoc", "salesSpoc",
-            "hiringManager", "deliveryManager", "skillCluster", "projectManager",
-            "hbuSpoc",
-            "primarySkills", "secondarySkills", "demandLocations"
-    })
     @Query("""
-        SELECT d
-        FROM AddDemand d
-        WHERE (:hbuId IS NULL OR d.hbu.id = :hbuId)
-        ORDER BY d.status.priority
-    """)
-    Page<AddDemand> findAllWithRefsByHbu(@Param("hbuId") Long hbuId, Pageable pageable);
+    SELECT d
+    FROM AddDemand d
+    WHERE (:hbuId IS NULL OR d.hbu.id = :hbuId)
+    ORDER BY
+        CASE
+            WHEN LOWER(d.status.status) = 'open' THEN 1
+            WHEN LOWER(d.status.status) = 'profile shared' THEN 2
+            WHEN LOWER(d.status.status) = 'delayed demand - profile not available' THEN 3
+            WHEN LOWER(d.status.status) = 'candidate shortlisted' THEN 4
+            WHEN LOWER(d.status.status) = 'selected' THEN 5
+            WHEN LOWER(d.status.status) = 'on hold' THEN 6
+            ELSE 999
+        END,
+        d.createdAt DESC
+""")
+    Page<AddDemand> findAllWithRefsByHbu(
+            @Param("hbuId") Long hbuId,
+            Pageable pageable);
+
 
 
 
@@ -67,9 +77,28 @@ public interface AddDemandRepository extends JpaRepository<AddDemand, Long> {
     List<AddDemand> findByFileName(String fileName);
 
     @Query("select d.rrNumber from AddDemand d where d.rrNumber in :rrs")
-    List<Long> findExistingRrNumbers(@Param("rrs") Collection<Long> rrs);
+    List<String> findExistingRrNumbers(@Param("rrs") Collection<String> rrs);
 
-    boolean existsByRrNumberAndIdNot(Long rrNumber, Long id);
+    boolean existsByRrNumberAndIdNot(String rrNumber, Long id);
+
+    Optional<AddDemand> findByRrNumber(String rrNumber);
+
+    @EntityGraph(attributePaths = {
+            "hbu", "hbuSpoc",
+            "band", "priority", "lob",
+            "demandType", "demandTimeline",
+            "externalInternal", "status", "pod",
+            "pmo", "pmoSpoc", "salesSpoc",
+            "hiringManager", "deliveryManager",
+            "skillCluster","primarySkills","secondarySkills","demandLocations"
+    })
+    @Query("""
+    SELECT d
+    FROM AddDemand d
+    WHERE d.rrFlag = true
+    ORDER BY d.updatedAt DESC
+""")
+    Page<AddDemand> findAllRrFlagged(Pageable pageable);
 
 
     //for history
@@ -92,6 +121,3 @@ public interface AddDemandRepository extends JpaRepository<AddDemand, Long> {
 //    Optional<AddDemand> findByDemandIdentifierIgnoreCase(Long raw);
 
 }
-
-
-

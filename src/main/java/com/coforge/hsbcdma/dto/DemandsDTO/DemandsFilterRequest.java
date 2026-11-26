@@ -19,7 +19,7 @@ public class DemandsFilterRequest {
 
     private Long demandId;
     private String displayDemandId;
-    private Long rrNumber;
+    private String rrNumber;
 
     // experience stored as String in entity
     private String experienceRange;
@@ -86,7 +86,17 @@ public class DemandsFilterRequest {
 
     private List<String> locationNames;
     private List<Long> locationIds;
-
+    private Integer p1Age;
     // ---------- Free‑text ----------
     private String keyword;
+    private Long businessFunctionId;
+    private List<String> businessFunctionNames;
+
+    private Long contractTypeId;
+    private List<String> contractTypeNames;
+
+    private Long jobCategoryId;
+    private List<String> jobCategoryNames;
+
+    private Long ctoolId;
 }

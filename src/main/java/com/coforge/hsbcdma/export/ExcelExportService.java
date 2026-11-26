@@ -9,6 +9,7 @@ import com.coforge.hsbcdma.repository.ProfileRepositories.ProfileRepository;
 import com.coforge.hsbcdma.repository.ProfileTrackerRepositories.ProfileTrackRepository;
 import com.coforge.hsbcdma.repository.UserAccountRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Service;
@@ -19,13 +20,13 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ExcelExportService {
 
     private final AddDemandRepository demandRepo;
@@ -33,9 +34,28 @@ public class ExcelExportService {
     private final ProfileTrackRepository profileTrackerRepo;
     private final OnboardingRepository onboardingRepo;
     private final UserAccountRepository userAccountRepository;
+    private final ExportSecurityService exportSecurityService;
+    private final DemandExportConfig demandExportConfig;
+    private final ProfileExportConfig profileExportConfig;
+    private static final Map<String, String> HBU_ROLE_MAPPING =
+            Map.of(
+                    "HBU-AI", "AI",
+                    "HBU-CIMS", "CIMS",
+                    "HBU-DATA", "DATA",
+                    "HBU-DPA", "DPA",
+                    "HBU-ENGINEERING", "ENGINEERING",
+                    "HBU-EXPERIENCE", "EXPERIENCE",
+                    "HBU-IA", "IA",
+                    "HBU-QE", "QE"
+            );
+    private boolean isHbuRole(String role) {
+        return role != null && role.startsWith("HBU-");
+    }
 
-
-
+    public record ColumnDef<T>(
+            String header,
+            Function<T,Object> extractor
+    ){}
     private String formatLobDemandId(String lob, Long demandId) {
         return lob + "-" + demandId;
     }
@@ -43,81 +63,219 @@ public class ExcelExportService {
     public String getDemandExcelTimestampName(String name) {
         return name + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
     }
+    private List<ColumnDef<DemandExportDTO>> demandColumns(
+            Set<String> roles) {
 
+        List<ColumnDef<DemandExportDTO>> columns =
+                new ArrayList<>();
+
+        columns.add(new ColumnDef<>(
+                "Demand ID",
+                DemandExportDTO::demandId
+        ));
+
+        columns.add(new ColumnDef<>(
+                "LOB",
+                DemandExportDTO::lob
+        ));
+
+        columns.add(new ColumnDef<>(
+                "Status",
+                DemandExportDTO::status
+        ));
+
+        columns.add(new ColumnDef<>(
+                "Skill Cluster",
+                DemandExportDTO::skillCluster
+        ));
+
+        if (roles.contains("ADMIN")
+                || roles.contains("PMO")) {
+
+            columns.add(new ColumnDef<>(
+                    "RR",
+                    DemandExportDTO::rrNumber
+            ));
+        }
+
+        if (roles.contains("ADMIN")
+                || roles.contains("PM")
+                || roles.contains("LEADERSHIP")) {
+
+            columns.add(new ColumnDef<>(
+                    "Hiring Manager",
+                    DemandExportDTO::hiringManager
+            ));
+        }
+
+        if (roles.contains("ADMIN")) {
+
+            columns.add(new ColumnDef<>(
+                    "Created By",
+                    DemandExportDTO::createdByName
+            ));
+        }
+
+        return columns;
+    }
     // ---------- AddDemand ----------
+//    @Transactional(readOnly = true)
+//    public ByteArrayInputStream exportDemandsExcel() {
+//        Set<String> roles =
+//                exportSecurityService.getCurrentRoles();
+//        log.info("Roles = {}", roles);
+//        var demands = demandRepo.findAll();
+//
+//
+//
+//        String hbuRole = roles.stream()
+//                .filter(this::isHbuRole)
+//
+//                .findFirst()
+//
+//                .orElse(null);
+//
+//        if (hbuRole != null) {
+//
+//
+//            String hbuName = hbuRole.replace("HBU-", "");
+//
+//
+//
+//            demands = demands.stream()
+//
+//                    .filter(d ->
+//
+//                            d.getHbu() != null
+//
+//                                    && hbuName.equalsIgnoreCase(
+//
+//                                    d.getHbu().getName()))
+//                    .toList();
+//        }
+//
+//        List<DemandExportDTO> rows =
+//                demands.stream()
+//                        .map(DemandExportDTO::from)
+//                        .toList();
+//
+//
+////        List<String> headers = List.of(
+////                "Demand ID",
+////                "RR",
+////                "Subcon RR",
+////                "LOB",
+////                "Skill Cluster",
+////                "Primary Skill",
+////                "Secondary Skill",
+////                "Priority",
+////                "Status",
+////                "Karat",
+////                "HBU",
+////                "Demand Timeline",
+////                "Demand Type",
+////                "Demand Location",
+////                "External/Internal",   // ✅ NEW
+////                "POD",                 // ✅ NEW
+////                "Demand Received Date",// ✅ NEW
+////                "Hiring Manager",
+////                "Delivery Manager",
+////                "PM",
+////                "Sales Spoc",
+////                "PMO",
+////                "Band",
+////                "Experience",
+////                "P1 Flag Date",
+////                "Created At",
+////                "Created By"
+////        );
+////
+////        List<Function<DemandExportDTO, Object>> ex = List.of(
+////                d -> d.demandId(),
+////                d -> d.rrNumber(),
+////                d -> d.isSubconRR() == null ? "" : (d.isSubconRR() ? "Yes" : "No"),
+////                d -> d.lob(),
+////                d -> Helper.toProperCase(d.skillCluster()),
+////                d -> Helper.toProperCaseCommaSeparated(d.primarySkills()),
+////                d -> Helper.toProperCaseCommaSeparated(d.secondarySkills()),
+////                d -> Helper.toProperCase(d.priority()),
+////                d -> Helper.toProperCase(d.status()),
+////                d -> d.karat() == null ? "" : (d.karat() ? "Yes" : "No"),
+////                d -> d.hbu(),
+////                d -> Helper.toProperCase(d.demandTimeline()),
+////                d -> Helper.toProperCase(d.demandType()),
+////                d -> Helper.toProperCaseCommaSeparated(d.locations()),
+////
+////                d -> Helper.toProperCase(d.externalInternal()), // ✅ NEW
+////                d -> Helper.toProperCase(d.pod()),             // ✅ NEW
+////                d -> d.demandReceivedDate(),                   // ✅ NEW
+////
+////                d -> Helper.toProperCase(d.hiringManager()),
+////                d -> Helper.toProperCase(d.deliveryManager()),
+////                d -> Helper.toProperCase(d.projectManager()),
+////                d -> Helper.toProperCase(d.salesSpoc()),
+////                d -> Helper.toProperCase(d.pmo()),
+////                d -> Helper.toProperCase(d.band()),
+////                d -> Helper.toProperCase(d.experience()),
+////                d -> d.p1FlagDate(),
+////                d -> d.createdAt() != null ? d.createdAt().toLocalDate() : null,
+////                d -> Helper.toProperCase(d.createdByName())
+////        );
+//
+////
+////        List<ColumnDef<DemandExportDTO>> cols =
+////                demandColumns(roles);
+//
+//        List<String> headers =
+//                cols.stream()
+//                        .map(ColumnDef::header)
+//                        .toList();
+//
+//        List<Function<DemandExportDTO,Object>> ex =
+//                cols.stream()
+//                        .map(ColumnDef::extractor)
+//                        .toList();
+//        String sheetName = getDemandExcelTimestampName("Demands");
+//        return new ExcelExporter<>(sheetName, headers, ex).export(rows);
+//    }
+
     @Transactional(readOnly = true)
     public ByteArrayInputStream exportDemandsExcel() {
-        List<DemandExportDTO> rows = demandRepo.findAll().stream()
+
+        Set<String> roles =
+                exportSecurityService.getCurrentRoles();
+
+        log.info("Roles = {}", roles);
+
+        var demands = demandRepo.findAll();
+
+        String hbuRole = roles.stream()
+                .filter(this::isHbuRole)
+                .findFirst()
+                .orElse(null);
+
+        if (hbuRole != null) {
+
+            String hbuName = hbuRole.replace("HBU-", "");
+
+            demands = demands.stream()
+                    .filter(d ->
+                            d.getHbu() != null
+                                    && hbuName.equalsIgnoreCase(
+                                    d.getHbu().getName()))
+                    .toList();
+        }
+
+        List<DemandExportDTO> rows = demands.stream()
                 .map(DemandExportDTO::from)
                 .toList();
 
-        List<String> headers = List.of(
-                "Demand ID",
-                "RR",
-                "Subcon RR",
-                "LOB",
-                "Skill Cluster",
-                "Primary Skill",
-                "Secondary Skill",
-                "Priority",
-                "Status",
-                "Karat",
-                "HBU",
-                "Demand Timeline",
-                "Demand Type",
-                "Demand Location",
-                "External/Internal",   // ✅ NEW
-                "POD",                 // ✅ NEW
-                "Demand Received Date",// ✅ NEW
-                "Hiring Manager",
-                "Delivery Manager",
-                "PM",
-                "Sales Spoc",
-                "PMO",
-                "Band",
-                "Experience",
-                "P1 Flag Date",
-                "Created At",
-                "Created By"
-        );
-
-        List<Function<DemandExportDTO, Object>> ex = List.of(
-                d -> d.demandId(),
-                d -> d.rrNumber(),
-                d -> d.isSubconRR() == null ? "" : (d.isSubconRR() ? "Yes" : "No"),
-                d -> d.lob(),
-                d -> Helper.toProperCase(d.skillCluster()),
-                d -> Helper.toProperCaseCommaSeparated(d.primarySkills()),
-                d -> Helper.toProperCaseCommaSeparated(d.secondarySkills()),
-                d -> Helper.toProperCase(d.priority()),
-                d -> Helper.toProperCase(d.status()),
-                d -> d.karat() == null ? "" : (d.karat() ? "Yes" : "No"),
-                d -> d.hbu(),
-                d -> Helper.toProperCase(d.demandTimeline()),
-                d -> Helper.toProperCase(d.demandType()),
-                d -> Helper.toProperCaseCommaSeparated(d.locations()),
-
-                d -> Helper.toProperCase(d.externalInternal()), // ✅ NEW
-                d -> Helper.toProperCase(d.pod()),             // ✅ NEW
-                d -> d.demandReceivedDate(),                   // ✅ NEW
-
-                d -> Helper.toProperCase(d.hiringManager()),
-                d -> Helper.toProperCase(d.deliveryManager()),
-                d -> Helper.toProperCase(d.projectManager()),
-                d -> Helper.toProperCase(d.salesSpoc()),
-                d -> Helper.toProperCase(d.pmo()),
-                d -> Helper.toProperCase(d.band()),
-                d -> Helper.toProperCase(d.experience()),
-                d -> d.p1FlagDate(),
-                d -> d.createdAt() != null ? d.createdAt().toLocalDate() : null,
-                d -> Helper.toProperCase(d.createdByName())
-        );
-
-        String sheetName = getDemandExcelTimestampName("Demands");
-        return new ExcelExporter<>(sheetName, headers, ex).export(rows);
+        return new ExcelExporter<>(
+                getDemandExcelTimestampName("Demands"),
+                demandHeaders(),
+                demandExtractors()
+        ).export(rows);
     }
-
-
     // ---------- Profile ----------
     @Transactional(readOnly = true)
     public ByteArrayInputStream exportProfilesExcel() {
@@ -145,58 +303,182 @@ public class ExcelExportService {
                 ))
                 .toList();
 
-        var headers = List.of(
-                "Candidate Name",
-                "Email ID",
-                "Employee ID",
-                "Status",
-                "Phone",
-                "Exp (yrs)",
-                "Skill Cluster",
-                "Primary Skills",
-                "Secondary Skills",
-                "Location",
-                "HBU",
-                "Created At",
-                "Created By"
-        );
+//        var headers = List.of(
+//                "Candidate Name",
+////                "Email ID",
+//                "Employee ID",
+//                "Status",
+////                "Phone",
+//                "Exp (yrs)",
+//                "Skill Cluster",
+//                "Primary Skills",
+//                "Secondary Skills",
+//                "Location",
+//                "HBU",
+//                "Created At",
+//                "Created By"
+//        );
+//
+//        var ex = List.<Function<ProfileExportDTO, Object>>of(
+//                p -> Helper.toProperCase(p.candidateName()),
+////                p -> p.emailId(),
+//                p -> p.empId(),
+//                p -> Helper.toProperCase(p.profileStatus()),                  // or p.profileStatus()
+////                p -> p.phoneNumber(),
+//                p -> p.experience(),
+//                p -> Helper.toProperCase(p.skillCluster()),
+//                p -> Helper.toProperCaseCommaSeparated(p.primarySkills()),
+//                p -> Helper.toProperCaseCommaSeparated(p.secondarySkills()),
+//                p -> Helper.toProperCase(p.location()),
+//                p -> p.hbu(),
+//                p -> p.createdAt(),
+//                p -> Helper.toProperCase(p.createdByUserId())
+//        );
+//
+//        String sheetName = getDemandExcelTimestampName("Profiles");
+//        return new ExcelExporter<>(sheetName, headers, ex).export(rows);
 
-        var ex = List.<Function<ProfileExportDTO, Object>>of(
-                p -> Helper.toProperCase(p.candidateName()),
-                p -> p.emailId(),
-                p -> p.empId(),
-                p -> Helper.toProperCase(p.profileStatus()),                  // or p.profileStatus()
-                p -> p.phoneNumber(),
-                p -> p.experience(),
-                p -> Helper.toProperCase(p.skillCluster()),
-                p -> Helper.toProperCaseCommaSeparated(p.primarySkills()),
-                p -> Helper.toProperCaseCommaSeparated(p.secondarySkills()),
-                p -> Helper.toProperCase(p.location()),
-                p -> p.hbu(),
-                p -> p.createdAt(),
-                p -> Helper.toProperCase(p.createdByUserId())
-        );
+        Set<String> roles =
+                exportSecurityService.getCurrentRoles();
 
-        String sheetName = getDemandExcelTimestampName("Profiles");
-        return new ExcelExporter<>(sheetName, headers, ex).export(rows);
+        log.info("Profile Export Roles = {}", roles);
+
+        List<ColumnDef<ProfileExportDTO>> cols =
+                profileExportConfig.getColumns(roles);
+
+        List<String> headers = cols.stream()
+                .map(ColumnDef::header)
+                .toList();
+
+        List<Function<ProfileExportDTO, Object>> extractors =
+                cols.stream()
+                        .map(ColumnDef::extractor)
+                        .toList();
+
+        String sheetName =
+                getDemandExcelTimestampName("Profiles");
+
+        return new ExcelExporter<>(
+                sheetName,
+                headers,
+                extractors
+        ).export(rows);
     }
 
 
     // ---------- ProfileTracker ----------
+//    @Transactional(readOnly = true)
+//    public ByteArrayInputStream exportProfileTrackersExcel() {
+//
+//
+//        var profileTrackers = profileTrackerRepo.findAll();
+//
+//        // collect createdByUserId values from profile_tracker table
+//        var createdByUserIds = profileTrackers.stream()
+//                .map(ProfileTracker::getCreatedByUserId)
+//                .filter(Objects::nonNull)
+//                .collect(Collectors.toSet());
+//
+//        // fetch users using userId field (NOT PK id)
+//        var userMap = userAccountRepository.findByUserIdIn(createdByUserIds).stream()
+//                .collect(Collectors.toMap(
+//                        User::getUserId,
+//                        User::getName,
+//                        (a, b) -> a
+//                ));
+//
+//        var rows = profileTrackers.stream()
+//                .map(pt -> ProfileTrackerExportDTO.from(
+//                        pt,
+//                        userMap.getOrDefault(pt.getCreatedByUserId(), "N/A")
+//                ))
+//                .toList();
+//
+//        List<String> headers = List.of(
+//                "Demand ID",
+//                "Candidate Name",
+//                "Priority",
+//                "Skill Cluster",
+//                "Primary Skill",
+//                "Secondary Skill",
+//                "LOB",
+//                "HBU",
+//                "Location",
+//                "External/Internal",
+//                "Hiring Manager",
+//                "Attached Date",
+//                "Profile Shared Date",
+//                "Interview Date",
+//                "Decision Date",
+//                "Status",
+//                "Created At",
+//                "Created By"
+//        );
+//
+//        List<Function<ProfileTrackerExportDTO, Object>> extractors = List.of(
+//                ProfileTrackerExportDTO::demandId,
+//                p -> Helper.toProperCase(p.candidateName()),
+//                p -> Helper.toProperCase(p.priority()),
+//                p -> Helper.toProperCase(p.skillCluster()),
+//                p -> Helper.joinPrimarySkills(p.primarySkills()),
+//                p -> Helper.joinSecondarySkills(p.secondarySkills()),
+//                ProfileTrackerExportDTO::lob,
+//                ProfileTrackerExportDTO::hbu,
+//                p -> Helper.joinLocations(p.location()),
+//                p -> Helper.toProperCase(p.externalInternal()),
+//                p -> Helper.toProperCase(p.hiringManager()),
+//                ProfileTrackerExportDTO::attachedDate,
+//                ProfileTrackerExportDTO::profileSharedDate,
+//                ProfileTrackerExportDTO::interviewDate,
+//                ProfileTrackerExportDTO::decisionDate,
+//                p -> Helper.toProperCase(p.profileTrackerStatus()),
+//                p -> p.createdAt() != null ? p.createdAt().toLocalDate() : null,
+//                p -> Helper.toProperCase(p.createdByUserId())
+//        );
+//
+//        String sheetName = getDemandExcelTimestampName("ProfileTracker");
+//        return new ExcelExporter<>(sheetName, headers, extractors).export(rows);
+//
+//    }
+
     @Transactional(readOnly = true)
     public ByteArrayInputStream exportProfileTrackersExcel() {
 
+        Set<String> roles =
+                exportSecurityService.getCurrentRoles();
+
+        log.info("Roles = {}", roles);
 
         var profileTrackers = profileTrackerRepo.findAll();
 
-        // collect createdByUserId values from profile_tracker table
+        String hbuRole = roles.stream()
+                .filter(this::isHbuRole)
+                .findFirst()
+                .orElse(null);
+
+        if (hbuRole != null) {
+
+            String hbuName = hbuRole.replace("HBU-", "");
+
+            profileTrackers = profileTrackers.stream()
+                    .filter(pt ->
+                            pt.getDemand() != null
+                                    && pt.getDemand().getHbu() != null
+                                    && hbuName.equalsIgnoreCase(
+                                    pt.getDemand()
+                                            .getHbu()
+                                            .getName()))
+                    .toList();
+        }
+
         var createdByUserIds = profileTrackers.stream()
                 .map(ProfileTracker::getCreatedByUserId)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toSet());
 
-        // fetch users using userId field (NOT PK id)
-        var userMap = userAccountRepository.findByUserIdIn(createdByUserIds).stream()
+        var userMap = userAccountRepository
+                .findByUserIdIn(createdByUserIds)
+                .stream()
                 .collect(Collectors.toMap(
                         User::getUserId,
                         User::getName,
@@ -206,122 +488,122 @@ public class ExcelExportService {
         var rows = profileTrackers.stream()
                 .map(pt -> ProfileTrackerExportDTO.from(
                         pt,
-                        userMap.getOrDefault(pt.getCreatedByUserId(), "N/A")
+                        userMap.getOrDefault(
+                                pt.getCreatedByUserId(),
+                                "N/A")
                 ))
                 .toList();
 
-        List<String> headers = List.of(
-                "Demand ID",
-                "Candidate Name",
-                "Priority",
-                "Skill Cluster",
-                "Primary Skill",
-                "Secondary Skill",
-                "LOB",
-                "HBU",
-                "Location",
-                "External/Internal",
-                "Hiring Manager",
-                "Attached Date",
-                "Profile Shared Date",
-                "Interview Date",
-                "Decision Date",
-                "Status",
-                "Created At",
-                "Created By"
-        );
-
-        List<Function<ProfileTrackerExportDTO, Object>> extractors = List.of(
-                ProfileTrackerExportDTO::demandId,
-                p -> Helper.toProperCase(p.candidateName()),
-                p -> Helper.toProperCase(p.priority()),
-                p -> Helper.toProperCase(p.skillCluster()),
-                p -> Helper.joinPrimarySkills(p.primarySkills()),
-                p -> Helper.joinSecondarySkills(p.secondarySkills()),
-                ProfileTrackerExportDTO::lob,
-                ProfileTrackerExportDTO::hbu,
-                p -> Helper.joinLocations(p.location()),
-                p -> Helper.toProperCase(p.externalInternal()),
-                p -> Helper.toProperCase(p.hiringManager()),
-                ProfileTrackerExportDTO::attachedDate,
-                ProfileTrackerExportDTO::profileSharedDate,
-                ProfileTrackerExportDTO::interviewDate,
-                ProfileTrackerExportDTO::decisionDate,
-                p -> Helper.toProperCase(p.profileTrackerStatus()),
-                p -> p.createdAt() != null ? p.createdAt().toLocalDate() : null,
-                p -> Helper.toProperCase(p.createdByUserId())
-        );
-
-        String sheetName = getDemandExcelTimestampName("ProfileTracker");
-        return new ExcelExporter<>(sheetName, headers, extractors).export(rows);
-
+        return new ExcelExporter<>(
+                getDemandExcelTimestampName("ProfileTracker"),
+                profileTrackerHeaders(),
+                profileTrackerExtractors()
+        ).export(rows);
     }
-
-
     // ---------- Onboarding ----------
+//    @Transactional(readOnly = true)
+//    public ByteArrayInputStream exportOnboardingExcel() {
+//
+//        List<OnboardingExportDTO> rows = onboardingRepo.findAll()
+//                .stream()
+//                .map(o -> {
+//                    try {
+//                        return OnboardingExportDTO.from(o);
+//                    } catch (Exception e) {
+//                        System.out.println("Skipping onboarding id: " + o.getId());
+//                        return null;
+//                    }
+//                })
+//                .filter(Objects::nonNull)
+//                .toList();
+//
+//        List<String> headers = List.of(
+//                "Demand ID",
+//                "Candidate Name",
+//                "Profile Type",
+//                "HBU",
+//                "Hiring Manager",
+//                "PMO Spoc",   // ✅ ADDED
+//                "Band",
+//                "WBS Type",
+//                "Offer Date",
+//                "DOJ",
+//                "Profile Shared Date",
+//                "C-Tool ID",
+//                "BGV Status",
+//                "PEV Upload Date",
+//                "VP Tagging Date",
+//                "Tech Select Date",
+//                "HSBC Onboard Date",
+//                "Onboarding Status"
+//        );
+//
+//        List<Function<OnboardingExportDTO, Object>> extractors = List.of(
+//                OnboardingExportDTO::demandId,
+//                OnboardingExportDTO::candidateName,
+//                OnboardingExportDTO::profileType,
+//                OnboardingExportDTO::hbu,
+//                OnboardingExportDTO::hiringManager,
+//                OnboardingExportDTO::pmoSpoc,   // ✅ ADDED
+//                OnboardingExportDTO::band,
+//                OnboardingExportDTO::wbsType,
+//                OnboardingExportDTO::offerDate,
+//                OnboardingExportDTO::doj,
+//                OnboardingExportDTO::profileSharedDate,
+//                OnboardingExportDTO::ctoolId,
+//                OnboardingExportDTO::bgvStatus,
+//                OnboardingExportDTO::pevUploadDate,
+//                OnboardingExportDTO::vpTaggingDate,
+//                OnboardingExportDTO::techSelectDate,
+//                OnboardingExportDTO::hsbcOnboardDate,
+//                OnboardingExportDTO::onboardingStatus
+//        );
+//
+//        String sheetName = getDemandExcelTimestampName("Onboarding");
+//
+//        return new ExcelExporter<>(sheetName, headers, extractors).export(rows);
+//    }
     @Transactional(readOnly = true)
     public ByteArrayInputStream exportOnboardingExcel() {
 
-        List<OnboardingExportDTO> rows = onboardingRepo.findAll()
-                .stream()
-                .map(o -> {
-                    try {
-                        return OnboardingExportDTO.from(o);
-                    } catch (Exception e) {
-                        System.out.println("Skipping onboarding id: " + o.getId());
-                        return null;
-                    }
-                })
+        Set<String> roles =
+                exportSecurityService.getCurrentRoles();
+
+        log.info("Roles = {}", roles);
+
+        var onboardings = onboardingRepo.findAll();
+
+        String hbuRole = roles.stream()
+                .filter(this::isHbuRole)
+                .findFirst()
+                .orElse(null);
+
+        if (hbuRole != null) {
+
+            String hbuName = hbuRole.replace("HBU-", "");
+
+            onboardings = onboardings.stream()
+                    .filter(o ->
+                            o.getDemand() != null
+                                    && o.getDemand().getHbu() != null
+                                    && hbuName.equalsIgnoreCase(
+                                    o.getDemand()
+                                            .getHbu()
+                                            .getName()))
+                    .toList();
+        }
+
+        List<OnboardingExportDTO> rows = onboardings.stream()
+                .map(OnboardingExportDTO::from)
                 .filter(Objects::nonNull)
                 .toList();
 
-        List<String> headers = List.of(
-                "Demand ID",
-                "Candidate Name",
-                "Profile Type",
-                "HBU",
-                "Hiring Manager",
-                "PMO Spoc",   // ✅ ADDED
-                "Band",
-                "WBS Type",
-                "Offer Date",
-                "DOJ",
-                "Profile Shared Date",
-                "C-Tool ID",
-                "BGV Status",
-                "PEV Upload Date",
-                "VP Tagging Date",
-                "Tech Select Date",
-                "HSBC Onboard Date",
-                "Onboarding Status"
-        );
-
-        List<Function<OnboardingExportDTO, Object>> extractors = List.of(
-                OnboardingExportDTO::demandId,
-                OnboardingExportDTO::candidateName,
-                OnboardingExportDTO::profileType,
-                OnboardingExportDTO::hbu,
-                OnboardingExportDTO::hiringManager,
-                OnboardingExportDTO::pmoSpoc,   // ✅ ADDED
-                OnboardingExportDTO::band,
-                OnboardingExportDTO::wbsType,
-                OnboardingExportDTO::offerDate,
-                OnboardingExportDTO::doj,
-                OnboardingExportDTO::profileSharedDate,
-                OnboardingExportDTO::ctoolId,
-                OnboardingExportDTO::bgvStatus,
-                OnboardingExportDTO::pevUploadDate,
-                OnboardingExportDTO::vpTaggingDate,
-                OnboardingExportDTO::techSelectDate,
-                OnboardingExportDTO::hsbcOnboardDate,
-                OnboardingExportDTO::onboardingStatus
-        );
-
-        String sheetName = getDemandExcelTimestampName("Onboarding");
-
-        return new ExcelExporter<>(sheetName, headers, extractors).export(rows);
+        return new ExcelExporter<>(
+                getDemandExcelTimestampName("Onboarding"),
+                onboardingHeaders(),
+                onboardingExtractors()
+        ).export(rows);
     }
-
 
 
 //    private String toProperCase(String value) {
@@ -511,6 +793,10 @@ public class ExcelExportService {
                 "Demand Received Date", "Hiring Manager",
                 "Delivery Manager", "PM", "Sales Spoc",
                 "PMO", "Band", "Experience",
+                "Business Function",
+                "Job Category",
+                "Contract Type",
+                "ctool Id",
                 "P1 Flag Date", "Created At", "Created By"
         );
     }
@@ -541,6 +827,10 @@ public class ExcelExportService {
                 DemandExportDTO::pmo,
                 DemandExportDTO::band,
                 DemandExportDTO::experience,
+                DemandExportDTO::businessFunction,
+                DemandExportDTO::jobCategory,
+                DemandExportDTO::contractType,
+                DemandExportDTO::ctoolId,
                 DemandExportDTO::p1FlagDate,
                 d -> d.createdAt() != null ? d.createdAt().toLocalDate() : null,
                 DemandExportDTO::createdByName
@@ -550,14 +840,28 @@ public class ExcelExportService {
     private List<String> profileHeaders() {
 
         return List.of(
-                "Candidate Name", "Email ID", "Employee ID", "Phone", "Active", "Experience",
+                "Candidate Name",
+//                "Email ID",
+                "Employee ID",
+//                "Phone",
+                "Active", "Experience",
 
                 "Skill Cluster", "Location", "HBU", "External/Internal", "Country",
                 "Profile Status", "Origin", "Karat Status", "Source", "Overall Status",
 
-                "Summary", "File Name", "PAN", "Karat Readiness", "LOB Shared",
-                "Practice", "Band", "Ageing", "Ageing Range", "Codes", "Code Type",
-                "Min Billing Rate", "Project Code",
+                "Summary",
+                "File Name",
+                "PAN",
+                "Karat Readiness",
+                "LOB Shared",
+                "Practice",
+                "Band",
+                "Ageing",
+                "Ageing Range",
+                "Codes",
+                "Code Type",
+                "Min Billing Rate",
+                "Project Code",
 
                 "Date Of Submission", "Week Of", "Account Received On", "Status Date",
 
@@ -565,6 +869,17 @@ public class ExcelExportService {
                 "Negotiable NP LWD", "Recruiter",
 
                 "Primary Skills", "Secondary Skills",
+                "Persona",
+                "Mentor Buddy",
+                "Prep Status",
+                "Start Date",
+                "Planned End Date",
+                "Coderpad Result 1",
+                "Coderpad Result 2",
+                "Karat Ready Status",
+                "Karat Test Date",
+                "Karat Test Result",
+                "Karat Ageing",
 
                 "Created At", "Created By", "Updated At", "Updated By"
         );
@@ -575,9 +890,9 @@ public class ExcelExportService {
         return List.of(
 
                 p -> Helper.toProperCase(p.candidateName()),
-                ProfileExportDTO::emailId,
+//                ProfileExportDTO::emailId,
                 ProfileExportDTO::empId,
-                ProfileExportDTO::phoneNumber,
+//                ProfileExportDTO::phoneNumber,
                 p -> p.isActive() != null ? (p.isActive() ? "Yes" : "No") : "",
                 ProfileExportDTO::experience,
 
@@ -620,6 +935,20 @@ public class ExcelExportService {
                 p -> Helper.toProperCaseCommaSeparated(p.primarySkills()),
                 p -> Helper.toProperCaseCommaSeparated(p.secondarySkills()),
 
+                p -> Helper.toProperCase(p.persona()),
+
+                ProfileExportDTO::mentorBuddy,
+                p -> Helper.toProperCase(p.prepStatus()),
+
+                ProfileExportDTO::startDate,
+                ProfileExportDTO::plannedEndDate,
+
+                p -> Helper.toProperCase(p.coderpadResult1()),
+                p -> Helper.toProperCase(p.coderpadResult2()),
+                p -> Helper.toProperCase(p.karatReadyStatus()),
+                ProfileExportDTO::karatTestDate,
+                p -> Helper.toProperCase(p.karatTestResult()),
+                ProfileExportDTO::karatAgeing,
                 p -> p.createdAt() != null ? p.createdAt().toLocalDate() : null,
                 ProfileExportDTO::createdByUserId,
                 ProfileExportDTO::updatedAt,

@@ -1,5 +1,6 @@
 package com.coforge.hsbcdma.Import.Profile;
 
+import com.coforge.hsbcdma.Import.ExcelColumnHelper;
 import com.coforge.hsbcdma.Import.ExcelDateHelper;
 import com.coforge.hsbcdma.entity.CountryCode;
 import com.coforge.hsbcdma.entity.Location;
@@ -47,6 +48,7 @@ public class ProfileExcelImportHelper {
     private final KaratStatusMasterRepository karatRepo;
     private final SourceMasterRepository sourceRepo;
     private final OverallStatusMasterRepository overallRepo;
+    private final ProfileRepository profileRepository;
 
     public boolean isValidExcelFile(String contentType) {
         return EXCEL_TYPE.equals(contentType);
@@ -77,7 +79,9 @@ public class ProfileExcelImportHelper {
         try (Workbook wb = new XSSFWorkbook(in)) {
 
             Sheet sheet = wb.getSheetAt(0);
-
+            Map<String, Integer> headerMap =
+            ExcelColumnHelper.getHeaderIndexMap(sheet);
+            Set<String> excelUniqueProfiles = new HashSet<>();
             for (Row row : sheet) {
 
                 if (row.getRowNum() == 0) continue;
@@ -88,87 +92,307 @@ public class ProfileExcelImportHelper {
                 try {
 
                     // BASIC
-                    p.setCandidateName(getString(row.getCell(0)));
-                    p.setEmailId(normalizeEmail(getString(row.getCell(1))));
-                    p.setEmpId(getEmpId(row.getCell(2)));
-                    p.setPhoneNumber(getLong(row.getCell(3)));
-                    p.setIsActive(getBoolean(row.getCell(4)));
-                    p.setExperience(getFloat(row.getCell(5)));
+                    p.setCandidateName(
+                            getString(ExcelColumnHelper.getCell(row, headerMap, "candidate name"))
+                    );
+                    p.setEmailId(normalizeEmail(getString(ExcelColumnHelper.getCell(row, headerMap, "email id"))));
+                    p.setEmpId(getEmpId(ExcelColumnHelper.getCell(row, headerMap, "emp id")));
+                    p.setPhoneNumber(getLong(ExcelColumnHelper.getCell(row, headerMap, "phone number")));
+                    p.setIsActive(getBoolean(
+                            ExcelColumnHelper.getCell(row, headerMap, "is active")
+                    ));
+                    p.setExperience(getFloat(ExcelColumnHelper.getCell(row, headerMap, "experience")));
 
                     // MASTER
-                    p.setSkillCluster(resolveOrCreate(getString(row.getCell(6)), skillClusterCache,
+                    p.setSkillCluster(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "skill cluster"
+                            )), skillClusterCache,
                             skillClusterRepo::findBySkillClusterIgnoreCase, SkillCluster::new, SkillCluster::setSkillCluster, skillClusterRepo::save));
 
-                    p.setLocation(resolveOrCreate(getString(row.getCell(7)), locationCache,
+                    p.setLocation(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "location"
+                            )), locationCache,
                             locationRepo::findByNameIgnoreCase, Location::new, Location::setName, locationRepo::save));
 
-                    p.setHbu(resolveOrCreate(getString(row.getCell(8)), hbuCache,
+                    p.setHbu(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "hbu"
+                            )), hbuCache,
                             hbuRepo::findByHbuIgnoreCase, Hbu::new, Hbu::setHbu, hbuRepo::save));
 
-                    p.setExternalInternal(resolveOrCreate(getString(row.getCell(9)), extCache,
+                    p.setExternalInternal(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "external/internal"
+                            )), extCache,
                             externalInternalRepo::findByExternalInternalIgnoreCase, ExternalInternal::new, ExternalInternal::setExternalInternal, externalInternalRepo::save));
 
-                    p.setCountry(resolveOrCreateCountry(getString(row.getCell(10)), getString(row.getCell(11))));
-
-                    p.setProfileStatus(resolveOrCreate(getString(row.getCell(12)), statusCache,
+                    p.setCountry(
+                            resolveOrCreateCountry(
+                                    getString(
+                                            ExcelColumnHelper.getCell(
+                                                    row,
+                                                    headerMap,
+                                                    "country name"
+                                            )
+                                    ),
+                                    getString(
+                                            ExcelColumnHelper.getCell(
+                                                    row,
+                                                    headerMap,
+                                                    "country code"
+                                            )
+                                    )
+                            )
+                    );
+                    p.setProfileStatus(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "profile status"
+                            )), statusCache,
                             profileStatusRepo::findByNameIgnoreCase, ProfileStatus::new, ProfileStatus::setName, profileStatusRepo::save));
 
                     // SKILLS
-                    p.setPrimarySkills(resolveOrCreateSet(getString(row.getCell(13)), primaryCache,
+                    p.setPrimarySkills(resolveOrCreateSet(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "primary skills"
+                            )), primaryCache,
                             primarySkillsRepo::findByPrimarySkillsIgnoreCase,
                             PrimarySkills::new, PrimarySkills::setPrimarySkills, primarySkillsRepo::save));
 
-                    p.setSecondarySkills(resolveOrCreateSet(getString(row.getCell(14)), secondaryCache,
+                    p.setSecondarySkills(resolveOrCreateSet(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "secondary skills"
+                            )), secondaryCache,
                             secondarySkillsRepo::findBySecondarySkillsIgnoreCase,
                             SecondarySkills::new, SecondarySkills::setSecondarySkills, secondarySkillsRepo::save));
 
                     // NORMAL
-                    p.setPanNumber(normalizePAN(getString(row.getCell(15))));
-                    p.setSummary(getString(row.getCell(16)));
-                    p.setFileName(getString(row.getCell(17)));
+                    p.setPanNumber(normalizePAN(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "pan number"
+                    ))));
+                    p.setSummary(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "summary"
+                    )));
+//                    p.setFileName(getString(ExcelColumnHelper.getCell(
+//                            row,
+//                            headerMap,
+//                            "file name"
+//                    )));
 
                     // MASTER EXTRA
-                    p.setOrigin(resolveOrCreate(getString(row.getCell(18)), originCache,
+                    p.setOrigin(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "origin"
+                            )), originCache,
                             originRepo::findByNameIgnoreCase, Origin::new, Origin::setName, originRepo::save));
 
-                    p.setKaratStatus(resolveOrCreate(getString(row.getCell(19)), karatCache,
+                    p.setKaratStatus(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "karat status"
+                            )), karatCache,
                             karatRepo::findByNameIgnoreCase, KaratStatusMaster::new, KaratStatusMaster::setName, karatRepo::save));
 
-                    p.setSource(resolveOrCreate(getString(row.getCell(20)), sourceCache,
+                    p.setSource(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "source"
+                            )), sourceCache,
                             sourceRepo::findByNameIgnoreCase, SourceMaster::new, SourceMaster::setName, sourceRepo::save));
 
-                    p.setOverallStatusRdg(resolveOrCreate(getString(row.getCell(21)), overallCache,
+                    p.setOverallStatusRdg(resolveOrCreate(getString(ExcelColumnHelper.getCell(
+                                    row,
+                                    headerMap,
+                                    "overall status rdg"
+                            )), overallCache,
                             overallRepo::findByNameIgnoreCase, OverallStatusMaster::new, OverallStatusMaster::setName, overallRepo::save));
 
                     // DATES
-                    p.setDateOfSubmission(ExcelDateHelper.read(row.getCell(22)));
-                    p.setKaratReadiness(getString(row.getCell(23)));
-                    p.setWeekOf(ExcelDateHelper.read(row.getCell(24)));
-                    p.setAccountReceivedOn(ExcelDateHelper.read(row.getCell(25)));
-                    p.setStatusDate(ExcelDateHelper.read(row.getCell(26)));
+                    p.setDateOfSubmission(ExcelDateHelper.read(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "date of submission"
+                    )));
+                    p.setKaratReadiness(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "karat readiness"
+                    )));
+                    p.setWeekOf(ExcelDateHelper.read(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "week of"
+                    )));
+                    p.setAccountReceivedOn(ExcelDateHelper.read(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "account received on"
+                    )));
+                    p.setStatusDate(ExcelDateHelper.read(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "status date"
+                    )));
 
                     // OTHERS
-                    p.setLobShared(getString(row.getCell(27)));
-                    p.setPractice(getString(row.getCell(28)));
-                    p.setBand(getString(row.getCell(29)));
-                    p.setAgeing(getInteger(row.getCell(30)));
-                    p.setAgeingRange(getString(row.getCell(31)));
-                    p.setCodes(getString(row.getCell(32)));
-                    p.setCodeType(getString(row.getCell(33)));
-                    p.setMinBillingRate(getDouble(row.getCell(34)));
+                    p.setLobShared(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "lob shared"
+                    )));
+                    p.setPractice(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "practice"
+                    )));
+                    p.setBand(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "band"
+                    )));
+                    p.setAgeing(getInteger(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "ageing"
+                    )));
+                    p.setAgeingRange(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "ageing range"
+                    )));
+                    p.setCodes(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "codes"
+                    )));
+                    p.setCodeType(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "code type"
+                    )));
+                    p.setMinBillingRate(getDouble(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "min billing rate"
+                    )));
 
                     // ✅ PROJECT CODE (FINAL FIX)
-                    p.setProjectCode(getString(row.getCell(35)));
+                    p.setProjectCode(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "project code"
+                    )));
 
                     // EXTERNAL
-                    p.setL1InterviewDate(ExcelDateHelper.read(row.getCell(36)));
-                    p.setCurrentLocation(getString(row.getCell(37)));
-                    p.setOfficialNP(getString(row.getCell(38)));
-                    p.setNegotiableNpLwd(ExcelDateHelper.read(row.getCell(39)));
-                    p.setRecruiter(getString(row.getCell(40)));
+                    p.setL1InterviewDate(ExcelDateHelper.read(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "l1 interview date"
+                    )));
+                    p.setCurrentLocation(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "current location"
+                    )));
+                    p.setOfficialNP(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "official np"
+                    )));
+                    p.setNegotiableNpLwd(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "negotiable np/lwd"
+                    )));
+                    p.setRecruiter(getString(ExcelColumnHelper.getCell(
+                            row,
+                            headerMap,
+                            "recruiter"
+                    )));
+
+                    // ================================
+                    // DUPLICATE CHECK
+                    // ================================
+
+                    String uniqueKey = null;
+
+                    if (p.getEmpId() != null) {
+
+                        uniqueKey = "EMP_" + p.getEmpId();
+
+                        if (!excelUniqueProfiles.add(uniqueKey)) {
+                            log.info("Duplicate Emp ID in Excel: {}", p.getEmpId());
+                            continue;
+                        }
+
+                        if (profileRepository.existsByEmpId(p.getEmpId())) {
+                            log.info("Profile already exists with Emp ID: {}", p.getEmpId());
+                            continue;
+                        }
+
+                    } else if (p.getEmailId() != null) {
+
+                        uniqueKey = "EMAIL_" + p.getEmailId().toLowerCase();
+
+                        if (!excelUniqueProfiles.add(uniqueKey)) {
+                            log.info("Duplicate Email in Excel: {}", p.getEmailId());
+                            continue;
+                        }
+
+                        if (profileRepository.existsByEmailIdIgnoreCase(
+                                p.getEmailId())) {
+
+                            log.info("Profile already exists with Email: {}", p.getEmailId());
+                            continue;
+                        }
+
+                    } else if (p.getPanNumber() != null) {
+
+                        uniqueKey = "PAN_" + p.getPanNumber().toUpperCase();
+
+                        if (!excelUniqueProfiles.add(uniqueKey)) {
+                            log.info("Duplicate PAN in Excel: {}", p.getPanNumber());
+                            continue;
+                        }
+
+                        if (profileRepository.existsByPanNumberIgnoreCase(
+                                p.getPanNumber())) {
+
+                            log.info("Profile already exists with PAN: {}", p.getPanNumber());
+                            continue;
+                        }
+
+                    } else if (p.getPhoneNumber() != null) {
+
+                        uniqueKey = "PHONE_" + p.getPhoneNumber();
+
+                        if (!excelUniqueProfiles.add(uniqueKey)) {
+                            log.info("Duplicate Phone Number in Excel: {}", p.getPhoneNumber());
+                            continue;
+                        }
+
+                        if (profileRepository.existsByPhoneNumber(
+                                p.getPhoneNumber())) {
+
+                            log.info("Profile already exists with Phone Number: {}", p.getPhoneNumber());
+                            continue;
+                        }
+                    }
 
                     profiles.add(p);
-
                 } catch (Exception ex) {
 
                     log.error("Row {} failed: {}", row.getRowNum() + 1, ex.getMessage());
@@ -236,8 +460,12 @@ public class ProfileExcelImportHelper {
             BiConsumer<T, String> setter,
             Function<T, T> saveFn) {
 
+        if (raw == null || raw.trim().isEmpty()) {
+            return null;   // ✅ DO NOT CREATE MASTER
+        }
+
         String k = key(raw);
-        if (k == null) return null;
+
 
         if (cache.containsKey(k)) return cache.get(k);
 
@@ -266,6 +494,8 @@ public class ProfileExcelImportHelper {
         if (csv == null) return set;
 
         for (String val : csv.split(",")) {
+            if (val == null || val.trim().isEmpty()) continue;   // ✅ SKIP EMPTY
+
             T t = resolveOrCreate(val.trim(), cache, finder, factory, setter, saveFn);
             if (t != null) set.add(t);
         }
@@ -274,9 +504,13 @@ public class ProfileExcelImportHelper {
 
     // ----------------------------------------------------------
     // ✅ CELL HELPERS
-
     private String getString(Cell c) {
-        return c == null ? null : c.toString().trim();
+
+        if (c == null) return null;
+
+        String value = c.toString().trim();
+
+        return value.isEmpty() ? null : value;   // ✅ convert empty → null
     }
 
     private Long getLong(Cell c) {
@@ -304,15 +538,30 @@ public class ProfileExcelImportHelper {
         }
     }
 
+
     private Float getFloat(Cell c) {
-        try { return (float) c.getNumericCellValue(); }
-        catch (Exception e) { return null; }
+
+        try {
+            float val = (float) c.getNumericCellValue();
+            return val == 0 ? null : val;   // ✅ optional (based on business rule)
+        } catch (Exception e) {
+            return null;
+        }
     }
 
+
+
     private Boolean getBoolean(Cell c) {
-        if (c == null) return true;
-        return c.toString().equalsIgnoreCase("true") || c.toString().equals("1");
+
+        if (c == null) return null; // ✅ instead of true
+
+        String val = c.toString().trim();
+
+        if (val.isEmpty()) return null;
+
+        return val.equalsIgnoreCase("true") || val.equals("1");
     }
+
 
     private boolean isRowEmpty(Row row) {
         for (Cell c : row) {
