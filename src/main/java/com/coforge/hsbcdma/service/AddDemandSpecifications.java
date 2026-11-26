@@ -196,26 +196,146 @@ public final class AddDemandSpecifications {
                         root.get("p1FlagDate"), f.getP1FlagDateTo()));
 
             // ---- ManyToOne IDs ----
-            addEqId(p, cb, root, "hbu", f.getHbuId());
-            addEqId(p, cb, root, "hbuSpoc", f.getHbuSpocId());
-            addEqId(p, cb, root, "band", f.getBandId());
-            addEqId(p, cb, root, "priority", f.getPriorityId());
-            addEqId(p, cb, root, "status", f.getStatusId());
-            addEqId(p, cb, root, "lob", f.getLobId());
-            addEqId(p, cb, root, "subLob", f.getSubLobId());
-            addEqId(p, cb, root, "pod", f.getPodId());
-            addEqId(p, cb, root, "skillCluster", f.getSkillClusterId());
-            addEqId(p, cb, root, "projectManager", f.getProjectManagerId());
-            addEqId(p, cb, root, "pmo", f.getPmoId());
-            addEqId(p, cb, root, "pmoSpoc", f.getPmoSpocId());
-            addEqId(p, cb, root, "salesSpoc", f.getSalesSpocId());
-            addEqId(p, cb, root, "hiringManager", f.getHiringManagerId());
-            addEqId(p, cb, root, "deliveryManager", f.getDeliveryManagerId());
-            addEqId(p, cb, root, "demandType", f.getDemandTypeId());
-            addEqId(p, cb, root, "externalInternal", f.getExternalInternalId());
-            addEqId(p, cb, root, "businessFunction", f.getBusinessFunctionId());
-            addEqId(p, cb, root, "jobCategory", f.getJobCategoryId());
-            addEqId(p, cb, root, "contractType", f.getContractTypeId());
+//            addEqId(p, cb, root, "hbu", f.getHbuId());
+//            addEqId(p, cb, root, "hbuSpoc", f.getHbuSpocId());
+//            addEqId(p, cb, root, "band", f.getBandId());
+//            addEqId(p, cb, root, "priority", f.getPriorityId());
+//            addEqId(p, cb, root, "status", f.getStatusId());
+//            addEqId(p, cb, root, "lob", f.getLobId());
+//            addEqId(p, cb, root, "subLob", f.getSubLobId());
+//            addEqId(p, cb, root, "pod", f.getPodId());
+//            addEqId(p, cb, root, "skillCluster", f.getSkillClusterId());
+//            addEqId(p, cb, root, "projectManager", f.getProjectManagerId());
+//            addEqId(p, cb, root, "pmo", f.getPmoId());
+//            addEqId(p, cb, root, "pmoSpoc", f.getPmoSpocId());
+//            addEqId(p, cb, root, "salesSpoc", f.getSalesSpocId());
+//            addEqId(p, cb, root, "hiringManager", f.getHiringManagerId());
+//            addEqId(p, cb, root, "deliveryManager", f.getDeliveryManagerId());
+//            addEqId(p, cb, root, "demandType", f.getDemandTypeId());
+//            addEqId(p, cb, root, "externalInternal", f.getExternalInternalId());
+//            addEqId(p, cb, root, "businessFunction", f.getBusinessFunctionId());
+//            addEqId(p, cb, root, "jobCategory", f.getJobCategoryId());
+//            addEqId(p, cb, root, "contractType", f.getContractTypeId());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "hbu",
+                    f.getHbuId(),
+                    f.getPreferredHbuIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "band",
+                    f.getBandId(),
+                    f.getPreferredBandIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "priority",
+                    f.getPriorityId(),
+                    f.getPreferredPriorityIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "status",
+                    f.getStatusId(),
+                    f.getPreferredStatusIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "lob",
+                    f.getLobId(),
+                    f.getPreferredLobIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "subLob",
+                    f.getSubLobId(),
+                    f.getPreferredSubLobIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "pod",
+                    f.getPodId(),
+                    f.getPreferredPodIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "skillCluster",
+                    f.getSkillClusterId(),
+                    f.getPreferredSkillClusterIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "demandType",
+                    f.getDemandTypeId(),
+                    f.getPreferredDemandTypeIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "businessFunction",
+                    f.getBusinessFunctionId(),
+                    f.getPreferredBusinessFunctionIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "hbuSpoc",
+                    f.getHbuSpocId(),
+                    f.getPreferredHbuSpocIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "projectManager",
+                    f.getProjectManagerId(),
+                    f.getPreferredProjectManagerIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "pmo",
+                    f.getPmoId(),
+                    f.getPreferredPmoIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "pmoSpoc",
+                    f.getPmoSpocId(),
+                    f.getPreferredPmoSpocIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "salesSpoc",
+                    f.getSalesSpocId(),
+                    f.getPreferredSalesSpocIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "hiringManager",
+                    f.getHiringManagerId(),
+                    f.getPreferredHiringManagerIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "deliveryManager",
+                    f.getDeliveryManagerId(),
+                    f.getPreferredDeliveryManagerIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "externalInternal",
+                    f.getExternalInternalId(),
+                    f.getPreferredExternalInternalIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "jobCategory",
+                    f.getJobCategoryId(),
+                    f.getPreferredJobCategoryIds());
+
+            addEqOrInId(
+                    p, cb, root,
+                    "contractType",
+                    f.getContractTypeId(),
+                    f.getPreferredContractTypeIds());
 
             // ---- ManyToMany ID filters (ANY) ----
             joinIds(p, root, REL_PRIMARY_SKILLS, f.getPrimarySkillIds());
@@ -372,6 +492,34 @@ public final class AddDemandSpecifications {
                                 Root<AddDemand> r, String rel, Long id) {
         if (id != null) {
             p.add(cb.equal(r.get(rel).get(ID), id));
+        }
+    }
+
+    private static void addEqOrInId(
+            List<Predicate> p,
+            CriteriaBuilder cb,
+            Root<AddDemand> root,
+            String relation,
+            Long selectedId,
+            List<Long> preferredIds) {
+
+        if (selectedId != null) {
+
+            p.add(
+                    cb.equal(
+                            root.get(relation).get("id"),
+                            selectedId));
+
+            return;
+        }
+
+        if (preferredIds != null
+                && !preferredIds.isEmpty()) {
+
+            p.add(
+                    root.get(relation)
+                            .get("id")
+                            .in(preferredIds));
         }
     }
 

@@ -173,6 +173,11 @@ public class ProfileTrackService {
         // 9) Bulk save
         trackerRepository.saveAll(tracksToSave);
 
+        // Change demand status only when at least one new profile was attached
+        if (!tracksToSave.isEmpty()) {
+            updateDemandStatusAfterProfileAttachment(demand);
+        }
+
         // Changing profile status
         ProfileStatus profileAttachedStatus = profileStatusRepository
                 .findByNameIgnoreCase("Profile Attached to a Demand")
@@ -341,6 +346,11 @@ public class ProfileTrackService {
         // 9) Bulk save
         trackerRepository.saveAll(tracksToSave);
 
+        // Change every newly linked demand to "Profile Shared with IBU"
+        for (ProfileTracker tracker : tracksToSave) {
+            updateDemandStatusAfterProfileAttachment(tracker.getDemand());
+        }
+
         // Changing profile status
         ProfileStatus profileAttachedStatus = profileStatusRepository
                 .findByNameIgnoreCase("Profile Attached to a Demand")
@@ -396,6 +406,77 @@ public class ProfileTrackService {
         return profileTrackerStatusRepository.findByNameIgnoreCase("Attached")
                 .orElseThrow(() -> new IllegalStateException(
                         "ProfileTrackerStatus 'Attached' not found. Please seed it in profile_tracker_status table."));
+    }
+
+    private void updateDemandStatusAfterProfileAttachment(AddDemand demand) {
+
+        if (demand == null || demand.getId() == null) {
+            return;
+        }
+
+        updateDemandStatus(
+                demand,
+                "Profile Shared with IBU"
+        );
+    }
+
+    private void updateDemandStatusAfterProfileRemoval(AddDemand demand) {
+
+        if (demand == null || demand.getId() == null) {
+            return;
+        }
+
+        long remainingProfiles =
+                trackerRepository.countNonRemovedProfilesForDemand(demand.getId());
+
+        String requiredDemandStatus = remainingProfiles > 0
+                ? "Profile Shared with IBU"
+                : "Open";
+
+        updateDemandStatus(demand, requiredDemandStatus);
+    }
+
+    private void updateDemandStatus(
+            AddDemand demand,
+            String requiredStatusName
+    ) {
+
+        Status requiredStatus = statusRepository
+                .findByStatus(requiredStatusName)
+                .orElseThrow(() -> new IllegalStateException(
+                        "Demand status '" + requiredStatusName
+                                + "' not found in status master table"
+                ));
+
+        boolean statusAlreadyApplied =
+                demand.getStatus() != null
+                        && Objects.equals(
+                        demand.getStatus().getId(),
+                        requiredStatus.getId()
+                );
+
+        if (statusAlreadyApplied) {
+            return;
+        }
+
+        Map<String, Object> oldDemandSnapshot =
+                addDemandSnapshotBuilder.snapshot(demand);
+
+        demand.setStatus(requiredStatus);
+        demand.setUpdatedByUserId(getCurrentUserId());
+        demand.setUpdatedByName(getCurrentUserName());
+
+        demandRepository.save(demand);
+
+        genericAuditService.recordUpdate(
+                AuditHistory.EntityType.ADD_DEMAND,
+                AuditHistory.Action.UPDATE_DEMAND,
+                demand,
+                oldDemandSnapshot,
+                addDemandSnapshotBuilder,
+                addDemandAuditMeta,
+                getCurrentUserId()
+        );
     }
 
 
@@ -1334,18 +1415,25 @@ public class ProfileTrackService {
         ProfileTracker pt = trackerRepository.findById(trackerId)
                 .orElseThrow(() ->
                         new RuntimeException(
-                                "ProfileTracker not found: " + trackerId));
+                                "ProfileTracker not found: " + trackerId
+                        ));
 
         String currentStatus =
                 pt.getProfileTrackerStatus() != null
                         ? pt.getProfileTrackerStatus().getName()
                         : "";
 
+        // Prevent duplicate removal
+        if ("Removed From Demand".equalsIgnoreCase(currentStatus)) {
+            throw new IllegalStateException(
+                    "Profile is already removed from this demand"
+            );
+        }
+
         // Prevent removals for critical statuses
-        if (
-                "Client Selected".equalsIgnoreCase(currentStatus)
-                        || onboardingRepository.existsByProfileTracker_Id(pt.getId())
-        ) {
+        if ("Client Selected".equalsIgnoreCase(currentStatus)
+                || onboardingRepository.existsByProfileTracker_Id(pt.getId())) {
+
             throw new IllegalStateException(
                     "Profile cannot be removed from demand in status "
                             + currentStatus
@@ -1360,7 +1448,9 @@ public class ProfileTrackService {
                         .findByNameIgnoreCase("Removed From Demand")
                         .orElseThrow(() ->
                                 new IllegalStateException(
-                                        "ProfileTrackerStatus 'Removed From Demand' not found"));
+                                        "ProfileTrackerStatus "
+                                                + "'Removed From Demand' not found"
+                                ));
 
         pt.setProfileTrackerStatus(removedStatus);
         pt.setUpdatedByUserId(getCurrentUserId());
@@ -1378,6 +1468,8 @@ public class ProfileTrackService {
         );
 
         updateProfileStatusAfterRemoval(pt.getProfile());
+
+        updateDemandStatusAfterProfileRemoval(pt.getDemand());
 
         notificationService.notifyAllUsersExceptActor(
                 "PROFILE_TRACKER",

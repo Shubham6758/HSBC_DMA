@@ -99,4 +99,27 @@ public class DemandsFilterRequest {
     private List<String> jobCategoryNames;
 
     private Long ctoolId;
+
+
+
+    private List<Long> preferredLobIds;
+    private List<Long> preferredSubLobIds;
+    private List<Long> preferredHbuIds;
+    private List<Long> preferredHbuSpocIds;
+    private List<Long> preferredBandIds;
+    private List<Long> preferredPriorityIds;
+    private List<Long> preferredStatusIds;
+    private List<Long> preferredPodIds;
+    private List<Long> preferredSkillClusterIds;
+    private List<Long> preferredProjectManagerIds;
+    private List<Long> preferredPmoIds;
+    private List<Long> preferredPmoSpocIds;
+    private List<Long> preferredSalesSpocIds;
+    private List<Long> preferredHiringManagerIds;
+    private List<Long> preferredDeliveryManagerIds;
+    private List<Long> preferredDemandTypeIds;
+    private List<Long> preferredExternalInternalIds;
+    private List<Long> preferredBusinessFunctionIds;
+    private List<Long> preferredJobCategoryIds;
+    private List<Long> preferredContractTypeIds;
 }

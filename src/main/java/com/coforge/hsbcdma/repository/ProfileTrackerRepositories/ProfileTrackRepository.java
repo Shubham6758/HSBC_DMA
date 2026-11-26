@@ -34,7 +34,7 @@ public interface ProfileTrackRepository extends JpaRepository<ProfileTracker, Lo
 
     @EntityGraph(attributePaths = {"demand"})
     List<ProfileTracker> findByProfile_Id(Long profileId);
-// Import
+    // Import
     Optional<ProfileTracker> findByDemandIdAndProfileId(Long demandId, Long profileId);
 
     Optional<ProfileTracker> findByDemand_IdAndProfile_Id(Long id, Long id1);
@@ -124,5 +124,19 @@ public interface ProfileTrackRepository extends JpaRepository<ProfileTracker, Lo
 """)
     long countActiveMappingsForProfile(
             @Param("profileId") Long profileId);
+
+
+    @Query("""
+    SELECT COUNT(pt)
+    FROM ProfileTracker pt
+    WHERE pt.demand.id = :demandId
+      AND (
+          pt.profileTrackerStatus IS NULL
+          OR LOWER(pt.profileTrackerStatus.name) <> 'removed from demand'
+      )
+    """)
+    long countNonRemovedProfilesForDemand(
+            @Param("demandId") Long demandId
+    );
 
 }
